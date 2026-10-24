@@ -296,7 +296,7 @@ async function scan(root, opts = {}) {
     if (isManifest(f.rel)) manifestFiles.push({ rel: f.rel, raw: text });
     const vendored = !opts.includeVendored && isVendoredAsset(f.rel, text);
     fileData.get(f.rel).vendored = vendored;
-    if(lang==='rust'&&!vendored) {
+    if(lang==='rust'&&!vendored&&(opts.includeTests||!isTestPath(relLogical))) {
       rustBytes+=Buffer.byteLength(text);
       if(rustSources.length<4096&&rustBytes<=32*1024*1024)rustSources.push({file:f.rel,raw:text});
       else rustComplete=false;
@@ -326,7 +326,8 @@ async function scan(root, opts = {}) {
   for (const s of [...skipped.symlinks, ...(opts.repoSymlinks || [])]) if (s.escapes) raw.push({ ruleId: 'FILE-SYMLINK-001', file: s.rel, line: 1, col: 1, detail: `→ ${s.target}`, source: 'config' });
 
   // Supply chain
-  const rustProject=analyzeRustProject(rustSources,manifestFiles,rustComplete&&!truncated&&!readFailures&&!limits.depth&&!limits.unreadable&&!skipped.large&&!skipped.symlinks.length&&!opts.repoSymlinks?.length);
+  const rustContextComplete=rustComplete&&!truncated&&!readFailures&&!limits.depth&&!limits.unreadable&&!skipped.large&&!skipped.excluded&&!skipped.symlinks.length&&!opts.repoSymlinks?.length&&!files.some(f=>/(?:^|\/)\.cargo\/config(?:\.toml)?$/i.test(f.rel));
+  const rustProject=analyzeRustProject(rustSources,manifestFiles,rustContextComplete);
   for(const f of rustProject.files)fileData.get(f.file).rustCoverage=f.coverage;
   raw.push(...rustProject.findings);
   const supply = analyzeSupplyChain(manifestFiles);

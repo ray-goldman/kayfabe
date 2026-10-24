@@ -33,7 +33,7 @@ function analyzeFile(input,parsed,crates,projectBlocked,projectComplete) {
  const {tokens:t,pairs}=parsed;Object.defineProperty(t,'pairs',{value:pairs});
  const coverage={status:'partial',lexed:parsed.complete,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,diagnostics:parsed.diagnostics.map(d=>({...d}))};
  const findings=[];if(!parsed.complete)return {file:input.file,coverage,findings};
- const aliases=new Map(),functions=[];let ownership=projectComplete&&crates.size>0,depth=0,itemStart=0;
+ const aliases=new Map(),terminators=new Set(),functions=[];let ownership=projectComplete&&crates.size>0,depth=0,itemStart=0;
  for(let i=0;i<t.length;i++) {
   const v=t[i].value;
   if(v==='macro_rules'||v==='extern'&&t[i+1]?.value==='crate'||v==='*'&&t[i-1]?.value==='::')ownership=false;
@@ -42,7 +42,7 @@ function analyzeFile(input,parsed,crates,projectBlocked,projectComplete) {
    if(end===t.length)ownership=false;
    const attributed=t.slice(itemStart,i).some(x=>x.value==='#'),imported=new Map();
    const result=imports(t,i+1,end,imported);if(!result.complete||result.glob)ownership=false;
-   for(const [alias,key]of imported)aliases.set(alias,attributed||aliases.has(alias)?null:key);
+   for(const [alias,key]of imported){aliases.set(alias,attributed||aliases.has(alias)?null:key);if(['std::process::exit','std::process::abort'].includes(key))terminators.add(alias);}
    i=end;itemStart=end+1;continue;
   }
   if(v==='fn'&&t[i+1]?.kind==='identifier') {
@@ -57,13 +57,16 @@ function analyzeFile(input,parsed,crates,projectBlocked,projectComplete) {
   }
   if(v==='{')depth++;else if(v==='}') {depth--;if(!depth)itemStart=i+1;}else if(v===';'&&!depth)itemStart=i+1;
  }
+ // Import-through-import resolution and cycles are outside this phase. They
+ // can hide a terminating API or change constructor ownership; decline both.
+ for(const key of aliases.values())if(key&&aliases.has(key.split('::',1)[0]))ownership=false;
  const resolve=parts=>{
   let root=parts[0],rest=parts.slice(1);if(aliases.has(root)){const key=aliases.get(root);if(!key)return null;const p=key.split('::');root=p[0];rest=p.slice(1).concat(rest);}
   if(!crates.has(root)||projectBlocked.has(root))return null;
   const identity=rest.join('::');return ['Client::builder','blocking::Client::builder','ClientBuilder::new','blocking::ClientBuilder::new'].includes(identity)?identity:null;
  };
  for(const fn of functions) {
-  if(!fn.supported||!ownership)continue;
+  if(!fn.supported||!ownership||t.slice(fn.start,fn.end).some(token=>terminators.has(token.value)))continue;
   const localBlocked=new Set(fn.header.filter(x=>x.kind==='identifier').map(x=>x.value));
   for(let i=fn.start;i<fn.end;i++)if(t[i].value==='let') {
    let j=i+1;while(j<fn.end&&!['=',';'].includes(t[j].value)){if(t[j].kind==='identifier')localBlocked.add(t[j].value);j++;}
@@ -92,7 +95,8 @@ function analyzeFile(input,parsed,crates,projectBlocked,projectComplete) {
    if(t[j]&&![';',')',','].includes(t[j].value)&&j!==fn.end)continue;
    coverage.resolvedBuilderChains++;
    for(const [method,setting]of settings)if(setting?.unsafe&&(method.endsWith('_certs')||backend==='native'))findings.push({ruleId:method.endsWith('_certs')?'RUST-TLS-001':'RUST-TLS-002',file:input.file,line:setting.token.line,col:setting.token.col,source:'sast',confidence:'high'});
-   i=j-1;
+   // Continue through argument tokens: eagerly evaluated nested builders carry
+   // independent configuration evidence even when the outer chain is safe.
   }
  }
  if(!ownership)coverage.diagnostics.push({code:'rust-unresolved-crate-or-import',line:1,col:1});

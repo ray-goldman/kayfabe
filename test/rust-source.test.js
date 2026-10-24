@@ -69,6 +69,25 @@ test('unsupported module reachability cannot report cfg-excluded external module
  const r=analyze('fn main() {}',manifest,[{file:'src/lib.rs',raw:'#[cfg(any())] mod excluded;'}, {file:'src/excluded.rs',raw:`fn f() { ${chain}; }`}]);
  assert.equal(r.findings.length,0);
 });
+test('import aliases for known terminating APIs cannot make unreachable chains appear live',()=>{
+ for(const name of ['exit','abort'])assert.equal(hits(`use std::process::${name} as terminate; fn f() { terminate(${name==='exit'?'0':''}); ${chain}; }`).length,0);
+ for(const imports of ['use std::process as p; use p::exit as terminate;','use std::process::exit as end; use end as terminate;','use a as b; use b as a;']) {
+  assert.equal(hits(`${imports} fn f() { terminate(0); ${chain}; }`).length,0,imports);
+ }
+});
+test('nested eagerly evaluated builder arguments retain their own unsafe configuration finding',()=>{
+ const r=hits(`fn f() { let _outer=reqwest::Client::builder().user_agent(make_agent(${chain})).build(); }`);
+ assert.equal(r.length,1);assert.equal(r[0].ruleId,'RUST-TLS-001');
+});
+test('excluded tests cannot suppress production Rust checks; visible Cargo config prevents identity claims',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'kayfabe-rust-scope-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(root,'Cargo.toml'),manifest);fs.writeFileSync(path.join(root,'main.rs'),`fn main() { let c=${chain}; }`);
+ fs.mkdirSync(path.join(root,'tests'));fs.writeFileSync(path.join(root,'tests/client.rs'),'mod support;');
+ const {scan}=require('../src/engine');let r=await scan(root);
+ assert.equal(r.findings.filter(f=>f.ruleId==='RUST-TLS-001').length,1);assert.equal(r.coverage.scope.excludedTests,1);
+ fs.mkdirSync(path.join(root,'.cargo'));fs.writeFileSync(path.join(root,'.cargo/config.toml'),'[source.crates-io]\nreplace-with="local"\n[source.local]\ndirectory="local-source"');
+ r=await scan(root);assert.equal(r.findings.filter(f=>f.ruleId.startsWith('RUST-')).length,0);
+});
 test('Rust coverage stays partial and reports measured lexer/function counts without source text',()=>{
  const r=analyze(`fn plain() { let c=${chain}; } fn complex() { loop {} }`);
  assert.equal(r.files[0].coverage.lexed,true);assert.equal(r.files[0].coverage.discoveredFunctions,2);
