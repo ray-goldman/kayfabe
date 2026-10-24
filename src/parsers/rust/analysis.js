@@ -4,7 +4,8 @@ const {lexRust}=require('./lexer');
 const {parseCargo}=require('../../supply/cargo');
 const PROJECT_LIMITS=Object.freeze({files:4096,bytes:32*1024*1024,manifests:4096,tokens:400000});
 const METHODS=new Set(['redirect','timeout','connect_timeout','read_timeout','user_agent','https_only','pool_idle_timeout','pool_max_idle_per_host','use_rustls_tls','use_native_tls','add_root_certificate','no_proxy','proxy','default_headers','danger_accept_invalid_certs','danger_accept_invalid_hostnames']);
-const UNSUPPORTED=new Set(['if','else','match','loop','while','for','return','break','continue','yield','async','move','unsafe','use','fn','const','static','type','struct','enum','impl','trait','mod','exit','abort']);
+const UNSUPPORTED=new Set(['if','else','match','loop','while','for','return','break','continue','yield','async','await','move','unsafe','use','fn','const','static','type','struct','enum','impl','trait','mod','exit','abort','panic_any','resume_unwind','handle_alloc_error']);
+const TERMINATING_PATHS=new Set(['std::process::exit','std::process::abort','std::panic::panic_any','std::panic::resume_unwind','std::alloc::handle_alloc_error','alloc::alloc::handle_alloc_error']);
 const INERT_ATTRIBUTES=new Set(['cfg','cfg_attr','allow','warn','deny','forbid','doc','inline','cold','must_use','deprecated','repr','non_exhaustive','no_mangle','export_name','link','link_name','path','windows_subsystem','test','ignore','should_panic']);
 function imports(tokens,start,end,aliases) {
  let i=start,glob=false;
@@ -42,7 +43,7 @@ function analyzeFile(input,parsed,crates,projectBlocked,projectComplete) {
    if(end===t.length)ownership=false;
    const attributed=t.slice(itemStart,i).some(x=>x.value==='#'),imported=new Map();
    const result=imports(t,i+1,end,imported);if(!result.complete||result.glob)ownership=false;
-   for(const [alias,key]of imported){aliases.set(alias,attributed||aliases.has(alias)?null:key);if(['std::process::exit','std::process::abort'].includes(key))terminators.add(alias);}
+   for(const [alias,key]of imported){aliases.set(alias,attributed||aliases.has(alias)?null:key);if(TERMINATING_PATHS.has(key))terminators.add(alias);}
    i=end;itemStart=end+1;continue;
   }
   if(v==='fn'&&t[i+1]?.kind==='identifier') {
@@ -134,6 +135,7 @@ function analyzeRustProject(inputs,manifests,complete=true) {
   // Module reachability (including cfg and #[path]) is not resolved in this phase.
   // Suppress semantic proofs rather than treating excluded/orphan module code as live.
   if(parsed.tokens.some(t=>t.value==='mod'))complete=false;
+  if(parsed.tokens.some((t,i)=>t.value==='!'&&parsed.tokens[i-1]?.value==='->'))complete=false;
   let depth=0;
   for(let i=0;i<parsed.tokens.length;i++){const token=parsed.tokens[i];if(token.value==='!'&&!depth&&parsed.tokens[i-1]?.value!=='#')complete=false;if('([{'.includes(token.value))depth++;else if(')]}'.includes(token.value))depth--;}
   for(let i=0;i<parsed.tokens.length;i++)if(parsed.tokens[i].value==='#') {

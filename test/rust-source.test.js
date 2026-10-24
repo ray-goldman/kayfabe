@@ -74,6 +74,12 @@ test('import aliases for known terminating APIs cannot make unreachable chains a
  for(const imports of ['use std::process as p; use p::exit as terminate;','use std::process::exit as end; use end as terminate;','use a as b; use b as a;']) {
   assert.equal(hits(`${imports} fn f() { terminate(0); ${chain}; }`).length,0,imports);
  }
+ for(const api of ['std::panic::panic_any','std::panic::resume_unwind','std::alloc::handle_alloc_error']) {
+  assert.equal(hits(`fn f() { ${api}(value); ${chain}; }`).length,0,api);
+  assert.equal(hits(`use ${api} as stop; fn f() { stop(value); ${chain}; }`).length,0,api+' alias');
+ }
+ assert.equal(hits(`fn f(stop: fn() -> !) { stop(); ${chain}; }`).length,0);
+ assert.equal(hits(`async fn f() { std::future::pending::<()>().await; ${chain}; }`).length,0);
 });
 test('nested eagerly evaluated builder arguments retain their own unsafe configuration finding',()=>{
  const r=hits(`fn f() { let _outer=reqwest::Client::builder().user_agent(make_agent(${chain})).build(); }`);
