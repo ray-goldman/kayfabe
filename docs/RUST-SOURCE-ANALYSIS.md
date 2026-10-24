@@ -35,4 +35,6 @@ The original aggregate body-admission concern remains a manual review question. 
 
 Two scanner-owned vulnerable/fixed corpus pairs provide regression coverage only. They are not independent evaluation data. Established benchmarks and supplied applications retain their separate labels and policies.
 
+See [the frozen measurements and review summary](RUST-SOURCE-RESULTS.md) for the exact scanner version, unchanged benchmark decisions and Hermes coverage counts.
+
 References: [Rust tokens](https://doc.rust-lang.org/reference/tokens.html), [Rust use declarations](https://doc.rust-lang.org/reference/items/use-declarations.html), [reqwest 0.12.28 ClientBuilder](https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html).

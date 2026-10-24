@@ -2,11 +2,11 @@
 
 Assessment date: 2026-10-24. Use Kayfabe as an additional static review tool with human triage. The current evidence does not support using it as the only .NET security gate.
 
-The [coverage and Cargo inventory update](RUST-CARGO-COVERAGE-RESULTS.md) preserved all established benchmark decisions. Rust source analysis remains unsupported and is now reported explicitly. Cargo lock inventory, limited advisory coverage and an optional coverage gate are described separately from source accuracy.
+The [initial Rust source update](RUST-SOURCE-RESULTS.md) preserves all established benchmark decisions and adds two bounded reqwest TLS checks. Rust coverage remains incomplete: the Hermes pair tokenizes, but its functions are outside the supported semantic subset. Cargo lock inventory, limited advisory coverage and the optional coverage gate remain separate from source accuracy.
 
 ## What the measurements say
 
-The final console-logging precision rerun preserved the established results below. The separate development-app warning reduction and exact provenance are recorded in [the precision report](CSHARP-CONSOLE-AUTH-PRECISION.md). Keep these datasets separate; they measure different things.
+The final Rust source rerun preserved the established results below. The earlier development-app warning reduction and exact provenance are recorded in [the precision report](CSHARP-CONSOLE-AUTH-PRECISION.md). Keep these datasets separate; they measure different things.
 
 | Dataset | True positives | False positives | True negatives | Misses | Interpretation |
 |---|---:|---:|---:|---:|---|
@@ -17,7 +17,7 @@ The final console-logging precision rerun preserved the established results belo
 
 Full Juliet C# recall includes unsupported weakness families. Within the two detected families, command-injection recall is 97.37% with a 52.63% false-positive rate; SQL-injection recall is 64.91% with a 26.32% false-positive rate. The low aggregate false-positive rate must not hide that noise. These are synthetic benchmark rates, not estimates of production performance.
 
-There has been measurable precision progress: the [earlier frozen Juliet C# baseline](benchmarks/dotnet-juliet-phase2-baseline.json) recorded 1,036 false positives and 1,036 true positives. On the same input, label and unit-manifest hashes, the current baseline has 470 false positives and the same 1,036 true positives: 566 fewer false positives, a 54.63% reduction. Precision rose from 50.00% to 68.79%; overall recall stayed at 3.49%. These are historical improvements, not gains from this console-logging change.
+There has been measurable precision progress: the [earlier frozen Juliet C# baseline](benchmarks/dotnet-juliet-phase2-baseline.json) recorded 1,036 false positives and 1,036 true positives. On the same input, label and unit-manifest hashes, the current baseline has 470 false positives and the same 1,036 true positives: 566 fewer false positives, a 54.63% reduction. Precision rose from 50.00% to 68.79%; overall recall stayed at 3.49%. These are historical improvements; the initial Rust checks add no measured .NET precision or recall gain.
 
 The original real-CVE corpus still scores **0/8 parent/fix pairs**. The separate localized scoring policy scores 1/8 and must not replace the original number. Native C is unsupported; an empty C scan earns no true-negative credit. None of the supplied application results is a fresh independent holdout.
 
