@@ -11,6 +11,7 @@ const CODE_RULES = [
   ...require('./java'),
   ...require('./go_ruby_csharp'),
   ...require('./csharp'),
+  ...require('./rust'),
 ];
 
 const SUPPLY_RULES = [

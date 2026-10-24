@@ -11,6 +11,7 @@ function sourceLanguage(file) {
 }
 function buildCoverage({files,fileData,skipped,truncated,limits,supply,opts,readFailures=0,osvStatus='not-requested'}) {
   const languages = Object.create(null); let excludedTests=0, excludedVendored=0;
+  const rust={status:'partial',eligibleFiles:0,lexedFiles:0,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,diagnosticCounts:Object.create(null),note:'Bounded tokens, plain functions and resolved reqwest builder chains only. No module graph, macro expansion, cfg evaluation, trait/type inference, variable builder flow or cross-file taint. Visible modules, macro attributes and ambiguous dependency identity suppress semantic checks. Counts do not measure vulnerability recall.'};
   for(const f of files) {
     const lang=sourceLanguage(f.rel);if(!lang)continue;
     if(fileData.get(f.rel)?.vendored){excludedVendored++;continue;}
@@ -18,13 +19,19 @@ function buildCoverage({files,fileData,skipped,truncated,limits,supply,opts,read
     const row=languages[lang] ||= {files:0,analyzedFiles:0,unsupportedFiles:0};row.files++;
     if(SUPPORTED.has(lang)&&fileData.get(f.rel)?.sourceAnalyzed)row.analyzedFiles++;
     else if(!SUPPORTED.has(lang))row.unsupportedFiles++;
+    if(lang==='rust') {
+      rust.eligibleFiles++;const r=fileData.get(f.rel)?.rustCoverage;
+      if(r){row.partiallyAnalyzedFiles=(row.partiallyAnalyzedFiles||0)+1;rust.lexedFiles+=Number(r.lexed);rust.discoveredFunctions+=r.discoveredFunctions;rust.analyzedFunctions+=r.analyzedFunctions;rust.resolvedBuilderChains+=r.resolvedBuilderChains;
+        for(const d of r.diagnostics)rust.diagnosticCounts[d.code]=(rust.diagnosticCounts[d.code]||0)+1;}
+      else rust.diagnosticCounts['rust-omitted-file']=(rust.diagnosticCounts['rust-omitted-file']||0)+1;
+    }
   }
   const sourceFiles=Object.values(languages).reduce((n,r)=>n+r.files,0),analyzedFiles=Object.values(languages).reduce((n,r)=>n+r.analyzedFiles,0),unsupportedFiles=Object.values(languages).reduce((n,r)=>n+r.unsupportedFiles,0);
   const interrupted=!!(truncated||limits.depth||limits.unreadable||limits.large||readFailures||skipped.symlinks.length||opts.repoSymlinks?.length);
   const cargo=supply.cargo,diagnostics=cargo.inputs.flatMap(i=>i.diagnostics.map(d=>({file:i.file,...d})));
   return {
     schema:'kayfabe/coverage@1',
-    source:{status:interrupted||unsupportedFiles||analyzedFiles<sourceFiles?'incomplete':sourceFiles?'complete':'not-applicable',files:sourceFiles,analyzedFiles,unsupportedFiles,languages,note:'Complete means available source checks ran on selected known source files, not exhaustive detection or full parsing. Rust source analysis is unsupported. Other extensions may also be unsupported.'},
+    source:{status:interrupted||unsupportedFiles||analyzedFiles<sourceFiles?'incomplete':sourceFiles?'complete':'not-applicable',files:sourceFiles,analyzedFiles,unsupportedFiles,languages,...(rust.eligibleFiles?{rust:{...rust,fileRatio:rust.lexedFiles/rust.eligibleFiles,functionRatio:rust.discoveredFunctions?rust.analyzedFunctions/rust.discoveredFunctions:null}}:{}),note:'Complete means available source checks ran on selected known source files, not exhaustive detection or full parsing. Rust has partial source checks and remains unsupported for a complete-coverage gate. Other extensions may also be unsupported.'},
     inventory:{status:'limited',note:'Legacy ecosystem inventory parsers have no completeness guarantee. Cargo completeness describes metadata parsing, not dependency resolution, installation or reachability.',cargo:{status:diagnostics.length||interrupted?'incomplete':cargo.inputs.length?'complete':'not-applicable',inputs:cargo.inputs,resolvedPackages:cargo.inventory.filter(d=>d.resolution==='locked').length,requirements:cargo.inventory.filter(d=>d.resolution==='requirement').length,publicRegistryPackages:cargo.inventory.filter(d=>d.publicRegistry).length,diagnostics}},
     advisories:{status:'limited',note:'Curated advisory coverage is limited; absence of matches is not a clean bill of health.',cargoSnapshot:{date:CARGO_SNAPSHOT.date,commit:CARGO_SNAPSHOT.commit,advisories:CARGO_SNAPSHOT.advisories.length,scope:CARGO_SNAPSHOT.scope},online:{status:osvStatus}},
     scope:{includeTests:!!opts.includeTests,excludedTests,excludedVendored,excludedEntries:skipped.excluded||0,skippedDirectories:skipped.dirs,symlinks:skipped.symlinks.length+(opts.repoSymlinks?.length||0),limits:{...limits,readFailures,truncated},note:'Default build/vendor directories, explicit excludes and excluded tests are outside the selected scope. Directory contents are not inventoried.'},
@@ -38,6 +45,7 @@ function coverageGate(result,required=false) {
 function coverageText(result) {
   const c=result.coverage;if(!c)return 'Coverage unknown: this report predates coverage reporting; rescan to measure it.';
   const cargo=c.inventory.cargo;
-  return `${coverageGate(result,true).passed?'Source coverage: available checks completed':'Incomplete coverage'} — source ${c.source.analyzedFiles}/${c.source.files} selected files; unsupported ${c.source.unsupportedFiles}. Cargo inventory: ${cargo.status}, ${cargo.resolvedPackages} locked packages, ${cargo.requirements} requirements. Advisory coverage: limited; Cargo snapshot ${c.advisories.cargoSnapshot.date} (${c.advisories.cargoSnapshot.advisories} advisory); OSV ${c.advisories.online.status}.`;
+  const rust=c.source.rust?` Rust partial: ${c.source.rust.lexedFiles}/${c.source.rust.eligibleFiles} files tokenized, ${c.source.rust.analyzedFunctions}/${c.source.rust.discoveredFunctions} functions in the supported subset, ${c.source.rust.resolvedBuilderChains} resolved builder chains.`:'';
+  return `${coverageGate(result,true).passed?'Source coverage: available checks completed':'Incomplete coverage'} — source ${c.source.analyzedFiles}/${c.source.files} selected files; unsupported ${c.source.unsupportedFiles}.${rust} Cargo inventory: ${cargo.status}, ${cargo.resolvedPackages} locked packages, ${cargo.requirements} requirements. Advisory coverage: limited; Cargo snapshot ${c.advisories.cargoSnapshot.date} (${c.advisories.cargoSnapshot.advisories} advisory); OSV ${c.advisories.online.status}.`;
 }
 module.exports={buildCoverage,coverageGate,coverageText,sourceLanguage};

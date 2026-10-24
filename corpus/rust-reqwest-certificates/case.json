@@ -1,0 +1,7 @@
+{
+  "id": "rust-reqwest-certificates",
+  "owasp": "A04",
+  "cwe": [295],
+  "description": "Resolved reqwest builder explicitly disables certificate validation; fixed client keeps validation enabled. Self-authored regression only.",
+  "expect": ["RUST-TLS-001"]
+}

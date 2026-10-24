@@ -1,0 +1,7 @@
+{
+  "id": "rust-reqwest-hostnames",
+  "owasp": "A04",
+  "cwe": [297],
+  "description": "Explicit native TLS client accepts mismatched hostnames; fixed client validates service identity. Self-authored regression only.",
+  "expect": ["RUST-TLS-002"]
+}
