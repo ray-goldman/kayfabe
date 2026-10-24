@@ -1,0 +1,5 @@
+'use strict';
+module.exports=[
+ {id:'RUST-TLS-001',title:'Rust reqwest client accepts invalid certificates',owasp:'A04',cwe:[295],severity:'high',confidence:'high',languages:['rust'],message:'A resolved reqwest client builder explicitly enables invalid certificate acceptance and builds the client. Server certificate authentication is disabled.',fix:'Keep certificate validation enabled. Configure an appropriate trusted CA for private services.',refs:['https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_certs']},
+ {id:'RUST-TLS-002',title:'Rust reqwest client accepts invalid hostnames',owasp:'A04',cwe:[297],severity:'high',confidence:'high',languages:['rust'],message:'A resolved reqwest client builder explicitly enables invalid hostname acceptance and builds the client. This weakens TLS endpoint authentication when the selected backend supports this option.',fix:'Keep hostname validation enabled and use a certificate valid for the intended service name.',refs:['https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_hostnames']},
+];

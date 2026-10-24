@@ -28,6 +28,7 @@ const { goFunctionTaint } = require('./go-scopes');
 const { analyzeCSharpFile } = require('./parsers/csharp/coverage');
 const { analyzeDotnetSummaries } = require('./dotnet/analysis');
 const { buildDotnetRoutes, middlewareOrder } = require('./dotnet/authorization');
+const { analyzeRustProject } = require('./parsers/rust/analysis');
 
 const MAX_LINE = 2000;
 const WRAPPED = new RegExp('^\\s*(?:await\\s+)?' + SANITIZERS.source.replace(/^\\\\b/, '') + '[\\s\\S]*\\)\\s*$', 'i');
@@ -239,6 +240,7 @@ async function scan(root, opts = {}) {
   const warnings = [];
   const csharpCoverage = { eligibleFiles: 0, completeFiles: 0, fallbackFiles: 0, discoveredMethods: 0, completeMethods: 0 };
   const csharpSources = [];
+  const rustSources = [];let rustBytes=0,rustComplete=true;
   const razorSources = [];
   const proofProjects = [];let proofProjectsComplete=true,proofProjectBytes=0;
   let razorComplete = !truncated && !javaIncomplete && !skipped.large, razorBytes = 0;
@@ -294,6 +296,11 @@ async function scan(root, opts = {}) {
     if (isManifest(f.rel)) manifestFiles.push({ rel: f.rel, raw: text });
     const vendored = !opts.includeVendored && isVendoredAsset(f.rel, text);
     fileData.get(f.rel).vendored = vendored;
+    if(lang==='rust'&&!vendored) {
+      rustBytes+=Buffer.byteLength(text);
+      if(rustSources.length<4096&&rustBytes<=32*1024*1024)rustSources.push({file:f.rel,raw:text});
+      else rustComplete=false;
+    }
 
     const isLock = /(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|Gemfile\.lock|poetry\.lock|go\.sum|Cargo\.lock|uv\.lock|bun\.lock|packages\.lock\.json|project\.assets\.json)$/.test(f.rel);
     if (!isLock) {
@@ -319,6 +326,9 @@ async function scan(root, opts = {}) {
   for (const s of [...skipped.symlinks, ...(opts.repoSymlinks || [])]) if (s.escapes) raw.push({ ruleId: 'FILE-SYMLINK-001', file: s.rel, line: 1, col: 1, detail: `→ ${s.target}`, source: 'config' });
 
   // Supply chain
+  const rustProject=analyzeRustProject(rustSources,manifestFiles,rustComplete&&!truncated&&!readFailures&&!limits.depth&&!limits.unreadable&&!skipped.large&&!skipped.symlinks.length&&!opts.repoSymlinks?.length);
+  for(const f of rustProject.files)fileData.get(f.file).rustCoverage=f.coverage;
+  raw.push(...rustProject.findings);
   const supply = analyzeSupplyChain(manifestFiles);
   raw.push(...supply.findings);
   if (opts.osv) {
