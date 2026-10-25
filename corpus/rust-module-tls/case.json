@@ -1,0 +1,7 @@
+{
+  "id": "rust-module-tls",
+  "owasp": "A04",
+  "cwe": [295],
+  "description": "An external Rust module builds a client with disabled certificate verification; fixed module keeps verification enabled. Self-authored regression only.",
+  "expect": ["RUST-TLS-001"]
+}

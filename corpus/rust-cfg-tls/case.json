@@ -1,0 +1,7 @@
+{
+  "id": "rust-cfg-tls",
+  "owasp": "A04",
+  "cwe": [297],
+  "description": "A proven active inline module disables hostname validation; the fixed active client validates names and the disabled decoy cannot create a warning. Self-authored regression only.",
+  "expect": ["RUST-TLS-002"]
+}

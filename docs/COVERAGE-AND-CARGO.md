@@ -14,6 +14,8 @@ Every new JSON report has `coverage` (`kayfabe/coverage@1`) and `dependencyInven
 
 Rust has [bounded source checks](RUST-SOURCE-ANALYSIS.md) for explicit reqwest TLS verification bypasses. **Rust coverage remains incomplete**, including when tokenization succeeds or no finding is reported. `coverage.source.rust` records tokenized files, functions within the supported subset, resolved builder chains and diagnostic counts. Rust remains in `unsupportedFiles` for the complete-coverage gate; `partiallyAnalyzedFiles` identifies files submitted to the bounded analyzer. General secrets/configuration checks may also report candidates. C/C++, Swift, Dart, Lua, Perl, Elixir and Objective-C extensions are explicitly unsupported by the source checks. Other unrecognized extensions may be unsupported; this is not an exhaustive language classifier. Existing C# parser coverage/fallback statistics remain separate.
 
+Rust additionally reports [bounded module and cfg coverage](RUST-MODULES-CFG.md): file reachability, module contexts, excluded/unknown items and unknown conditions. These structural counts do not establish semantic or vulnerability coverage. Unique physical function counts remain separate from repeated module contexts.
+
 The selected scope excludes default build/vendor directories, explicit excludes and tests unless `--include-tests` is given. Reports disclose these exclusions without counting their unvisited contents as analyzed. File size, depth/count limits, read failures, binary content in selected files and unfollowed links make coverage incomplete. This is conservative: an omitted non-source file can also make the scope uncertain.
 
 ```sh
