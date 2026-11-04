@@ -41,7 +41,8 @@ test('text, macros, unknown APIs, branches and binding collisions do not create 
   `use other::*; fn f() { ${chain}; }`];
  for(const source of safe) assert.equal(hits(source).length,0,source);
  assert.equal(analyze(`fn f() { ${chain}; }`,'[dependencies]\nreqwest={package="custom-http",version="1"}').findings.length,0);
- assert.equal(analyze(`fn f() { ${chain}; }`,manifest,[{file:'src/other.rs',raw:'mod reqwest {}'}]).findings.length,0);
+ // An unreachable file is not a namespace declaration in the main crate.
+ assert.equal(analyze(`fn f() { ${chain}; }`,manifest,[{file:'src/other.rs',raw:'mod reqwest {}'}]).findings.length,1);
 });
 test('hostname settings require an explicitly selected native TLS backend',()=>{
  assert.equal(hits('fn f(){reqwest::Client::builder().danger_accept_invalid_hostnames(true).build();}').length,0);

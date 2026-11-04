@@ -327,7 +327,7 @@ async function scan(root, opts = {}) {
 
   // Supply chain
   const rustContextComplete=rustComplete&&!truncated&&!readFailures&&!limits.depth&&!limits.unreadable&&!skipped.large&&!skipped.excluded&&!skipped.symlinks.length&&!opts.repoSymlinks?.length&&!files.some(f=>/(?:^|\/)\.cargo\/config(?:\.toml)?$/i.test(f.rel));
-  const rustProject=analyzeRustProject(rustSources,manifestFiles,rustContextComplete);
+  const rustProject=analyzeRustProject(rustSources,manifestFiles,rustContextComplete,{includeTests:!!opts.includeTests});
   for(const f of rustProject.files)fileData.get(f.file).rustCoverage=f.coverage;
   raw.push(...rustProject.findings);
   const supply = analyzeSupplyChain(manifestFiles);

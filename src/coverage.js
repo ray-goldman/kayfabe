@@ -11,7 +11,7 @@ function sourceLanguage(file) {
 }
 function buildCoverage({files,fileData,skipped,truncated,limits,supply,opts,readFailures=0,osvStatus='not-requested'}) {
   const languages = Object.create(null); let excludedTests=0, excludedVendored=0;
-  const rust={status:'partial',eligibleFiles:0,lexedFiles:0,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,diagnosticCounts:Object.create(null),note:'Bounded tokens, plain functions and resolved reqwest builder chains only. No module graph, macro expansion, cfg evaluation, trait/type inference, variable builder flow or cross-file taint. Visible modules, macro attributes and ambiguous dependency identity suppress semantic checks. Counts do not measure vulnerability recall.'};
+  const rust={status:'partial',eligibleFiles:0,lexedFiles:0,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,moduleScopes:0,reachableFiles:0,conditionalFiles:0,excludedFiles:0,unreachableFiles:0,cfgExcludedItems:0,cfgUnknownItems:0,cfgUnknownConditions:0,diagnosticCounts:Object.create(null),note:'Bounded module graph, three-state cfg, plain functions and resolved reqwest chains. Target/feature cfg stays unresolved; scanner host settings are not Rust build settings. No macro expansion, custom module paths, trait/type inference, variable builder flow or cross-file taint. Counts do not measure vulnerability recall.'};
   for(const f of files) {
     const lang=sourceLanguage(f.rel);if(!lang)continue;
     if(fileData.get(f.rel)?.vendored){excludedVendored++;continue;}
@@ -22,6 +22,9 @@ function buildCoverage({files,fileData,skipped,truncated,limits,supply,opts,read
     if(lang==='rust') {
       rust.eligibleFiles++;const r=fileData.get(f.rel)?.rustCoverage;
       if(r){row.partiallyAnalyzedFiles=(row.partiallyAnalyzedFiles||0)+1;rust.lexedFiles+=Number(r.lexed);rust.discoveredFunctions+=r.discoveredFunctions;rust.analyzedFunctions+=r.analyzedFunctions;rust.resolvedBuilderChains+=r.resolvedBuilderChains;
+        rust.moduleScopes+=r.moduleScopes||0;rust.cfgExcludedItems+=r.cfgExcludedItems||0;rust.cfgUnknownItems+=r.cfgUnknownItems||0;
+        rust.cfgUnknownConditions+=r.cfgUnknownConditions||0;
+        if(r.moduleStatus)rust[r.moduleStatus+'Files']++;
         for(const d of r.diagnostics)rust.diagnosticCounts[d.code]=(rust.diagnosticCounts[d.code]||0)+1;}
       else rust.diagnosticCounts['rust-omitted-file']=(rust.diagnosticCounts['rust-omitted-file']||0)+1;
     }
@@ -45,7 +48,7 @@ function coverageGate(result,required=false) {
 function coverageText(result) {
   const c=result.coverage;if(!c)return 'Coverage unknown: this report predates coverage reporting; rescan to measure it.';
   const cargo=c.inventory.cargo;
-  const rust=c.source.rust?` Rust partial: ${c.source.rust.lexedFiles}/${c.source.rust.eligibleFiles} files tokenized, ${c.source.rust.analyzedFunctions}/${c.source.rust.discoveredFunctions} functions in the supported subset, ${c.source.rust.resolvedBuilderChains} resolved builder chains.`:'';
+  const rust=c.source.rust?` Rust partial: ${c.source.rust.lexedFiles}/${c.source.rust.eligibleFiles} files tokenized, ${c.source.rust.analyzedFunctions}/${c.source.rust.discoveredFunctions} functions in the supported subset, ${c.source.rust.resolvedBuilderChains} resolved builder chains.${c.source.rust.moduleScopes!=null?` Module contexts ${c.source.rust.moduleScopes}; cfg excluded ${c.source.rust.cfgExcludedItems}, unresolved ${c.source.rust.cfgUnknownItems}.`:''}`:'';
   return `${coverageGate(result,true).passed?'Source coverage: available checks completed':'Incomplete coverage'} — source ${c.source.analyzedFiles}/${c.source.files} selected files; unsupported ${c.source.unsupportedFiles}.${rust} Cargo inventory: ${cargo.status}, ${cargo.resolvedPackages} locked packages, ${cargo.requirements} requirements. Advisory coverage: limited; Cargo snapshot ${c.advisories.cargoSnapshot.date} (${c.advisories.cargoSnapshot.advisories} advisory); OSV ${c.advisories.online.status}.`;
 }
 module.exports={buildCoverage,coverageGate,coverageText,sourceLanguage};
