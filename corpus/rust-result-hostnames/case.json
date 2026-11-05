@@ -1,0 +1,7 @@
+{
+  "id": "rust-result-hostnames",
+  "owasp": "A04",
+  "cwe": [297],
+  "description": "A terminal native-TLS reqwest build propagates its error after accepting invalid hostnames; the fixed client validates hostnames. Self-authored regression only.",
+  "expect": ["RUST-TLS-002"]
+}

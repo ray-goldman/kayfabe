@@ -1,5 +1,33 @@
 'use strict';
 const {evaluateAttributes}=require('./cfg');
+// Signature boundaries, not type resolution. Only the newly admitted generic
+// return shape is parsed: one nominal application with unit/path arguments.
+function describeFunctionHeader(tokens,pairs,item) {
+ const open=item.keyword+2,end=item.body;
+ if(end===null||tokens[open]?.value!=='(')return null; // function generics stay opaque
+ const close=pairs.get(open);
+ if(!Number.isInteger(close)||close>=end)return null;
+ for(let i=open+1;i<end;i++)if(tokens[i].value==='where'||i<close&&tokens[i].value==='<')return null;
+ const start=close+1,header=tokens.slice(start,end);
+ if(!header.some(t=>t.value==='<'))return {parameterStart:open+1,parameterEnd:close};
+ let i=start;
+ const nominal=()=>{
+  if(tokens[i]?.kind!=='identifier')return false;i++;
+  while(tokens[i]?.value==='::'){i++;if(tokens[i]?.kind!=='identifier')return false;i++;}
+  return true;
+ };
+ if(tokens[i++]?.value!=='->'||!nominal()||tokens[i++]?.value!=='<')return null;
+ let args=0;
+ while(i<end) {
+  if(tokens[i]?.value==='('&&pairs.get(i)===i+1)i+=2;
+  else if(!nominal())return null;
+  args++;
+  if(tokens[i]?.value===','){i++;if(tokens[i]?.value!=='>')continue;}
+  if(tokens[i++]?.value!=='>'||i!==end)return null;
+  return args?{parameterStart:open+1,parameterEnd:close}:null;
+ }
+ return null;
+}
 // Structural item boundaries only; expression bodies remain the existing subset.
 function structure(parsed,options={}) {
  const {tokens:t,pairs}=parsed;let work=0;const functions=[];
@@ -48,4 +76,4 @@ function structure(parsed,options={}) {
  const root=scope(0,t.length);
  return {root,functions};
 }
-module.exports={structure};
+module.exports={structure,describeFunctionHeader};
