@@ -24,7 +24,7 @@ Cfg evaluation permits 4,096 tokens, depth 32 and 256 attributes. Structural ind
 
 `coverage.source.rust` adds reachable, conditional, excluded and unreachable file counts, module scopes, excluded/unknown items and unknown condition counts. Module/item counts describe graph contexts: a file mounted twice can contribute twice. Discovered and analyzed function counts describe unique physical functions, so repeated mounts cannot inflate the analyzed-function ratio. Structural reachability does not imply runtime reachability or successful type checking.
 
-Rust remains incomplete and fails a required complete-coverage gate. Flat builder expressions are still the only supported semantic subset. Helpers, complex bodies, macro expansion, ownership, authorization and cross-file taint remain gaps.
+Rust remains incomplete and fails a required complete-coverage gate. Flat builder expressions and the [bounded single immutable local handoff](RUST-SOURCE-ANALYSIS.md) are supported. Helpers, complex bodies, macro expansion, general ownership, authorization and cross-file taint remain gaps.
 
 ## Hermes and regression data
 
