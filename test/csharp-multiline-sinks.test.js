@@ -47,6 +47,16 @@ test('nested private constant helpers keep expression ownership', () => {
     'private string Value() { return "status"; }'), false);
 });
 
+test('generic raw SQL calls preserve constant proof compatibility', () => {
+  for (const type of ['Dto', 'Models.Dto', 'global::Models.Dto', 'Result<string, List<Dto>>', 'Dto[]']) {
+    assert.equal(proof(` const string value = "1";\n db.SqlQueryRaw<${type}>("SELECT " + value); // sink`, 'CS-SQLI-001'), true, type);
+    assert.equal(proof(` db.SqlQueryRaw<${type}>("SELECT " + // sink\n input);`, 'CS-SQLI-001'), false, type);
+  }
+  for (const prefix of ['<Dto> + Unknown', '<Dto,>', '<>', '<Dto)>', '<Dto> Other', '<Dto = input>']) {
+    assert.equal(proof(` db.SqlQueryRaw${prefix}("SELECT " + "1"); // sink`, 'CS-SQLI-001'), false, prefix);
+  }
+});
+
 test('adjacent sinks on separate lines stay distinct while every same-line sink is checked', () => {
   assert.equal(proof(' Process.Start("cmd.exe", "/c " + // sink\n "status");\n Process.Start("cmd.exe", "/c " + input);'), true);
   assert.equal(proof(' Process.Start("fixed"); Process.Start("cmd.exe", // sink\n "/c " + input);'), false);

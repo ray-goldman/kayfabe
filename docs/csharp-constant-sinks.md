@@ -12,6 +12,8 @@ require a complete right-hand expression ending with a semicolon. `SqlCommand`
 construction and the supported raw SQL methods require constant SQL text in the
 first argument; connection objects and parameter values are not executable SQL.
 Nested calls still use the existing bounded private-helper/value proof.
+Raw SQL method calls retain bounded generic type argument support, including
+qualified names, nested generic types and simple array types before the call.
 
 Missing or mismatched delimiters, unknown values or mutations, ambiguous method
 ownership, and unsupported expressions retain candidates. The two-megabyte file,

@@ -37,6 +37,34 @@ function completeExpression(tokens, start, call = false) {
   return null;
 }
 
+function sqlCallOpen(tokens, start) {
+  if (tokens[start]?.text === '(') return start;
+  if (tokens[start]?.text !== '<') return -1;
+  // Only a bounded type-argument list may intervene before the call. Expand
+  // the lexer's shift token locally for nested generic closing delimiters.
+  const types = tokens.slice(start, start + 256).flatMap((token, offset) =>
+    (token.text === '>>' ? ['>', '>'] : [token.text]).map(text => ({ ...token, text, index: start + offset })));
+  let cursor = 0;
+  function argumentsAt(depth) {
+    if (depth > 24 || types[cursor++]?.text !== '<' || !typeAt(depth)) return false;
+    while (types[cursor]?.text === ',') { cursor++; if (!typeAt(depth)) return false; }
+    return types[cursor++]?.text === '>';
+  }
+  function typeAt(depth) {
+    if (types[cursor++]?.kind !== 'identifier') return false;
+    if (types[cursor]?.text === '<' && !argumentsAt(depth + 1)) return false;
+    while (['.', '::'].includes(types[cursor]?.text)) {
+      cursor++;
+      if (types[cursor++]?.kind !== 'identifier') return false;
+      if (types[cursor]?.text === '<' && !argumentsAt(depth + 1)) return false;
+    }
+    if (types[cursor]?.text === '?') cursor++;
+    while (types[cursor]?.text === '[' && types[cursor + 1]?.text === ']') cursor += 2;
+    return true;
+  }
+  return argumentsAt(0) && types[cursor]?.text === '(' ? types[cursor].index : -1;
+}
+
 function sinkExpression(tokens, ruleId, lineStart, lineEnd) {
   const expressions = [];
   for (let i = 0; i < tokens.length; i++) {
@@ -57,8 +85,8 @@ function sinkExpression(tokens, ruleId, lineStart, lineEnd) {
       const methodCall = ['FromSqlRaw', 'ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'SqlQueryRaw'].includes(tokens[i].text);
       const constructor = tokens[i].text === 'SqlCommand' && tokens[i - 1]?.text === 'new';
       if (!methodCall && !constructor) continue;
-      open = i + 1;
-      if (tokens[open]?.text !== '(') return null;
+      open = methodCall ? sqlCallOpen(tokens, i + 1) : i + 1;
+      if (open < 0 || tokens[open]?.text !== '(') return null;
     }
     const value = completeExpression(tokens, open + 1, true);
     if (!value?.length) return null;
