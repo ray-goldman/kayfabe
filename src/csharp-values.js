@@ -31,14 +31,19 @@ function split(tokens, separator) {
 // An invalid label (such as a missing name) must not fall through to the
 // positional path, where an unused actual is not necessarily expanded.
 function argumentLabel(tokens) {
-  let depth = 0;
+  let depth = 0, pending = 0, label = false;
   for (const token of tokens) {
     if (['(', '[', '{'].includes(token.text)) depth++;
     else if ([')', ']', '}'].includes(token.text)) depth--;
-    else if (!depth && token.text === '?') return false;
-    else if (!depth && token.text === ':') return true;
+    else if (!depth && token.text === '?') pending++;
+    else if (!depth && token.text === ':') {
+      if (pending) pending--;
+      else label = true;
+    }
   }
-  return false;
+  // A matched ternary colon is not a label. Keep examining the rest of the
+  // actual: an extra colon or unmatched question must not enter positional proof.
+  return label || pending > 0;
 }
 
 // This proof deliberately accepts a small subset. All syntactic writes count,
@@ -196,7 +201,7 @@ function createCSharpValueProof(code, ast) {
   // no ignored conversion, getter, call or condition may execute along this path.
   function proveNamed(args, callee, caller, prefix, visiting, depth, context) {
     if (!charge(context, callee.ts.length + caller.ts.length + args.length + ownerOpen - ownerStart) || callee.invalid || !callee.method.static ||
-        prefix.length === 3 && prefix[0].text === 'this' ||
+        prefix.length === 3 && (!closedOwner || prefix[0].text === 'this') ||
         caller.ts.some((t, i) => ['catch', 'delegate', 'from'].includes(t.text) ||
           id(t) === callee.method.name && caller.ts[i + 1]?.text !== '(' ||
           prefix.length === 3 && id(t) === id(prefix[0]) && caller.ts[i + 1]?.text !== '.')) return false;
@@ -207,10 +212,10 @@ function createCSharpValueProof(code, ast) {
     if (declaration.length !== 3 || declaration[2] !== 'string' ||
         !declaration.slice(0, 2).includes('private') || !declaration.slice(0, 2).includes('static')) return false;
     if (!identifier(tokens[nameIndex]) || prefix.length === 3 && !identifier(prefix[0])) return false;
-    // Generic owners/bases remain outside the new subset; no framework spelling
-    // establishes identity. For ordinary inherited owners the private declared
-    // member is applicable by identity conversion on every exact string actual.
-    // C# member lookup therefore stops at this owner rather than using base methods.
+    // A qualified type spelling needs a closed owner: an unknown inherited field
+    // or getter can supply that receiver. For unqualified calls, exact string
+    // identity conversions make the known private member applicable at this owner.
+    // No framework/base spelling establishes member or receiver identity.
     if (tokens.slice(ownerStart, ownerOpen).some(t => t.text === '<')) return false;
     const open = nameIndex + 1, close = pairs.get(open);
     if (tokens[open]?.text !== '(' || tokens[close + 1]?.start !== callee.method.bodyStart) return false;

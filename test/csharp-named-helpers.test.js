@@ -154,6 +154,71 @@ test('receivers and caller binding shadows cannot borrow a private helper proof'
   assert.equal(prove(fixture(`Process.Start("cmd /c " + Sample.${safe}); // sink`, helper, 'class Sample(Handler Sample)')), false);
 });
 
+for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+  for (const [form, rule, sink] of [
+    ['command', 'CS-CMDI-001', value => `Process.Start("cmd.exe", "/c " + ${value});`],
+    ['SQL', 'CS-SQLI-001', value => `command.CommandText = "SELECT " + ${value};`],
+  ]) {
+    test(`named ${form} requires closed owner identity for a qualified receiver (${ending})`, () => {
+      const body = sink('Sample.' + safe) + ' // sink';
+      assert.equal(prove(fixture(body).replace(/\n/g, eol), rule), true);
+      for (const base of ['ExternalBase', 'Unknown.Parent', 'global::ExternalBase', '@ExternalBase', 'Alias::ExternalBase']) {
+        assert.equal(prove(fixture(body, helper, 'class Sample : ' + base).replace(/\n/g, eol), rule), false, base);
+        assert.equal(prove(fixture(sink(safe) + ' // sink', helper, 'class Sample : ' + base).replace(/\n/g, eol), rule), true, base);
+      }
+    });
+
+    test(`positional ${form} checks every top-level conditional colon before fallback (${ending})`, () => {
+      for (const actual of [
+        'flag ? "a" : "b": "ignored"',
+        'flag ? flag ? "a" : "b" : "c": "ignored"',
+        'flag ? "a" : flag ? "b" : "c": "ignored"',
+        'flag ? (flag ? "a" : "b") : "c": "ignored"',
+        'flag ? "a" : (flag ? "b" : "c"): "ignored"',
+        'flag ? "a"', 'flag ? flag ? "a" : "b"',
+      ]) {
+        const body = sink(`Pick(${actual}, "fixed")`) + ' // sink';
+        assert.equal(prove(fixture(body).replace(/\n/g, eol), rule), false, actual);
+      }
+      for (const actual of [
+        'flag ? "a" : "b"',
+        'flag ? flag ? "a" : "b" : "c"',
+        'flag ? "a" : flag ? "b" : "c"',
+        'flag ? (flag ? "a" : "b") : "c"',
+        'flag ? "a" : (flag ? "b" : "c")',
+      ]) {
+        const body = sink(`Pick(${actual}, "fixed")`) + ' // sink';
+        assert.equal(prove(fixture(body).replace(/\n/g, eol), rule), true, actual);
+      }
+    });
+  }
+
+  test(`inherited field and property receivers retain scanner candidates (${ending})`, async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-inherited-named-'));
+    t.after(() => fs.rmSync(root, {recursive:true, force:true}));
+    for (const member of [
+      'protected dynamic Sample;', 'protected dynamic Sample { get; set; }',
+      'protected Provider Sample;', 'protected Provider Sample { get; set; }',
+      'private dynamic Sample;',
+    ]) {
+      // The two target files are static scanner input, never compiled/imported.
+      // No inaccessible/private external-member closure is inferred either.
+      fs.writeFileSync(path.join(root, 'Base.cs'), `class ExternalBase { ${member} }`.replace(/\n/g, eol));
+      const body = [
+        `info.Arguments = "/c " + Sample.${safe};`,
+        `command.CommandText = "SELECT " + Sample.${safe};`,
+        `info.Arguments = "/c " + ${safe};`,
+        `command.CommandText = "SELECT " + ${safe};`,
+      ].join('\n');
+      fs.writeFileSync(path.join(root, 'Operations.cs'), fixture(body, helper, 'class Sample : ExternalBase').replace(/\n/g, eol));
+      const result = await scan(root, {includeTests:true});
+      assert.deepEqual(result.findings.filter(f => ['CS-CMDI-001', 'CS-SQLI-001'].includes(f.ruleId)).map(f => [f.ruleId, f.file, f.line]), [
+        ['CS-CMDI-001', 'Operations.cs', 4], ['CS-SQLI-001', 'Operations.cs', 5],
+      ], member);
+    }
+  });
+}
+
 test('primary-owner gates remain in force around newly supported literal calls', () => {
   assert.equal(prove(fixture(`Process.Start("cmd /c " + ${safe}); // sink`, helper, 'class Sample(string input)')), true);
   for (const owner of ['class Sample<T>', 'partial class Sample', 'class Sample(string input = "default")', 'class Sample(string input) : Parent(input)']) {

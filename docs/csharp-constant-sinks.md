@@ -60,19 +60,24 @@ identifiers normalize consistently; the invocation maps each actual to its
 formal binding identity, independent of written argument order. No helper result
 is cached across calls. Mixed, missing, extra, empty, duplicate or unknown names,
 optional/ref/out/in/params forms, overloads, generics and helper writes decline
-this proof. Only unqualified or unshadowed same-owner static receivers qualify.
+this proof. Unqualified calls qualify; an unshadowed same-owner static receiver
+also requires a closed owner header with no explicit base list. An inherited
+field or property can otherwise supply the apparently type-named receiver.
 Caller catch/delegate/query bindings remain outside this named-call subset.
 Unresolved caller occurrences of the helper or static receiver name also decline
 the proof, including deconstructed bindings and method-group references.
 
-An ordinary inherited owner can qualify because the known private member is
-applicable by built-in string identity conversion for every named actual; lookup
-therefore resolves at that owner without guessing external base members. The
-base's spelling supplies no evidence. Inapplicable/custom-type declarations,
+An unqualified call in an ordinary inherited owner can qualify because the known
+private member is applicable by built-in string identity conversion for every
+named actual; lookup therefore resolves at that owner without guessing external
+base members. The base's spelling supplies no evidence. Inapplicable/custom-type declarations,
 generic owners/bases, foreign receivers, shadowed names and multiple owners
 remain unknown. Existing positional behavior and the all-visible-callers proof
 for a sink physically inside a helper remain separate; one safe invocation
 never establishes safety of that helper's input at every caller.
+The argument classifier scans the complete top-level conditional structure:
+matched ternary colons preserve positional compatibility, while extra label
+colons and unmatched questions decline proof before positional fallback.
 
 Each value-proof query has one shared 65,536-unit expansion budget, charged for
 expression tokens, binding visits, named caller/body traversal, call-site scans,
