@@ -1,0 +1,7 @@
+{
+  "id": "rust-result-certificates",
+  "owasp": "A04",
+  "cwe": [295],
+  "description": "A resolved terminal reqwest build propagates its error after disabling certificate checks; the fixed client validates certificates. Self-authored regression only.",
+  "expect": ["RUST-TLS-001"]
+}

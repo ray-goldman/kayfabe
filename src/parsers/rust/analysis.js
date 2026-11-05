@@ -2,7 +2,7 @@
 const path=require('node:path').posix;
 const {lexRust}=require('./lexer');
 const {parseCargo}=require('../../supply/cargo');
-const {structure}=require('./structure');
+const {structure,describeFunctionHeader}=require('./structure');
 const {moduleGraph}=require('./modules');
 const PROJECT_LIMITS=Object.freeze({files:4096,bytes:32*1024*1024,manifests:4096,tokens:400000});
 const METHODS=new Set(['redirect','timeout','connect_timeout','read_timeout','user_agent','https_only','pool_idle_timeout','pool_max_idle_per_host','use_rustls_tls','use_native_tls','add_root_certificate','no_proxy','proxy','default_headers','danger_accept_invalid_certs','danger_accept_invalid_hostnames']);
@@ -32,6 +32,61 @@ function imports(tokens,start,end,aliases) {
  }
  return {complete:tree([],end),glob};
 }
+// Candidate only: no findings or coverage are committed by this chain walk.
+function builderChain(t,pairs,start,limit,resolve,propagating=false) {
+ if(t[start]?.kind!=='identifier'||['::','.'].includes(t[start-1]?.value))return null;
+ let j=start,parts=[t[j++].value];while(t[j]?.value==='::'&&t[j+1]?.kind==='identifier'){parts.push(t[j+1].value);j+=2;}
+ if(!resolve(parts)||t[j]?.value!=='('||pairs.get(j)!==j+1)return null;
+ j+=2;const settings=new Map();let built=false,backend=null;
+ while(j<limit&&t[j]?.value==='.'&&t[j+1]?.kind==='identifier'&&t[j+2]?.value==='(') {
+  const method=t[j+1].value,open=j+2,end=pairs.get(open);
+  if(!Number.isInteger(end)||end>=limit)return null;
+  if(method==='build'){if(end!==open+1)return null;built=true;j=end+1;break;}
+  if(!METHODS.has(method))return null;
+  const argumentEnd=t[end-1]?.value===','?end-1:end,argumentCount=argumentEnd-open-1,arg=t[open+1];
+  // Constant-time argument checks keep the new flat walk linear. Arbitrary
+  // argument evaluation and backend selector arities are not guessed.
+  if(propagating&&(argumentCount>1||argumentCount===1&&!['identifier','number','literal'].includes(arg.kind)||['use_native_tls','use_rustls_tls'].includes(method)&&end!==open+1))return null;
+  if(method==='use_native_tls')backend='native';
+  if(method==='use_rustls_tls')backend='rustls';
+  if(method.startsWith('danger_accept_invalid_'))settings.set(method,argumentCount===1&&!arg.raw&&['true','false'].includes(arg.value)?{unsafe:arg.value==='true',token:t[j+1]}:null);
+  j=end+1;
+ }
+ if(!built)return null;
+ const questionIndex=t[j]?.value==='?'?j++:null;
+ if(questionIndex!==null) {
+  // New propagation mode does not prove evaluation of arbitrary setter calls.
+  if(t[j]?.value!==';')return null;
+ }else {
+  while(t[j]?.value==='.'&&['unwrap','expect'].includes(t[j+1]?.value)&&t[j+2]?.value==='(')j=pairs.get(j+2)+1;
+  if(t[j]&&![';',')',','].includes(t[j].value)&&j!==limit)return null;
+ }
+ return {start,end:j,settings,backend,questionIndex};
+}
+function propagatingFunction(t,pairs,start,end,resolve) {
+ let i=start,candidate=null;
+ while(i<end) {
+  if(t[i].value===';'){i++;continue;}
+  // After the build, only an optional flat Ok(()) tail is admitted. Its
+  // spelling confers no Result identity or safety evidence.
+  if(candidate) {
+   if(t[i]?.value!=='Ok'||t[i+1]?.value!=='('||t[i+2]?.value!=='('||pairs.get(i+2)!==i+3||pairs.get(i+1)!==i+4)return null;
+   i+=5;if(t[i]?.value===';')i++;return i===end?candidate:null;
+  }
+  let expression=i;
+  if(t[i].value==='let') {
+   i++;if(t[i]?.value==='mut')i++;
+   if(t[i]?.kind!=='identifier'||t[i+1]?.value!=='=')return null;
+   expression=i+2;
+   const value=t[expression];
+   if(value&&(['literal','number'].includes(value.kind)||!value.raw&&['true','false'].includes(value.value))&&t[expression+1]?.value===';'){i=expression+2;continue;}
+  }
+  candidate=builderChain(t,pairs,expression,end,resolve,true);
+  if(!candidate||candidate.questionIndex===null)return null;
+  i=candidate.end+1; // the immediate semicolon was checked by builderChain
+ }
+ return candidate;
+}
 function analyzeContext(ctx,crates,complete,record,budget) {
  const {tokens:t,pairs}=ctx.row.parsed,findings=record.findings,analyzed=record.analyzed,chains=record.chains;
  if(!Object.hasOwn(t,'pairs'))Object.defineProperty(t,'pairs',{value:pairs});
@@ -52,42 +107,31 @@ function analyzeContext(ctx,crates,complete,record,budget) {
  const input=ctx.row.input;
  for(const {item,state}of ctx.items) {
   if(item.kind!=='fn'||item.functionStart===null||state!==true)continue;
-  const fn={start:item.functionStart,end:item.functionEnd,header:item.header};
+  const fn={start:item.functionStart,end:item.functionEnd};
   budget.tokens+=fn.end-fn.start;if(budget.tokens>1000000){budget.exceeded=true;return;}
+  const signature=describeFunctionHeader(t,pairs,item);
   const body=t.slice(fn.start,fn.end);
-  const supported=!fn.header.some(x=>x.value==='<')&&!item.qualifiers.some(x=>['unsafe','extern'].includes(x))&&!item.effects.hazard&&
-   !body.some(x=>UNSUPPORTED.has(x.value)||['!','#','{','}','|','||','&&','?'].includes(x.value));
+  const supported=signature&&!item.qualifiers.some(x=>['unsafe','extern'].includes(x))&&!item.effects.hazard&&
+   !body.some(x=>UNSUPPORTED.has(x.value)||['!','#','{','}','|','||','&&'].includes(x.value));
   if(!supported||!ownership||body.some(token=>terminators.has(token.value)))continue;
-  const localBlocked=new Set(fn.header.filter(x=>x.kind==='identifier').map(x=>x.value));
+  const localBlocked=new Set(t.slice(signature.parameterStart,signature.parameterEnd).filter(x=>x.kind==='identifier').map(x=>x.value));
   for(let i=fn.start;i<fn.end;i++)if(t[i].value==='let') {
    let j=i+1;while(j<fn.end&&!['=',';'].includes(t[j].value)){if(t[j].kind==='identifier')localBlocked.add(t[j].value);j++;}
   }
-  analyzed.add(item);
-  for(let i=fn.start;i<fn.end;i++) {
-   if(t[i].kind!=='identifier'||['::','.'].includes(t[i-1]?.value))continue;
-   let j=i,parts=[t[j++].value];while(t[j]?.value==='::'&&t[j+1]?.kind==='identifier'){parts.push(t[j+1].value);j+=2;}
-   if(localBlocked.has(parts[0])||isBlocked(parts[0])||!resolve(parts)||t[j]?.value!=='('||pairs.get(j)!==j+1)continue;
-   j+=2;const settings=new Map();let built=false,valid=true,backend=null;
-   while(j<fn.end&&t[j]?.value==='.'&&t[j+1]?.kind==='identifier'&&t[j+2]?.value==='(') {
-    const method=t[j+1].value,open=j+2,end=pairs.get(open);
-    if(method==='build'){if(end!==open+1)valid=false;built=true;j=end+1;break;}
-    if(!METHODS.has(method)){valid=false;break;}
-    if(method==='use_native_tls')backend='native';
-    if(method==='use_rustls_tls')backend='rustls';
-    if(method.startsWith('danger_accept_invalid_')) {
-     const args=t.slice(open+1,end);if(args.at(-1)?.value===',')args.pop();
-     settings.set(method,args.length===1&&!args[0].raw&&['true','false'].includes(args[0].value)?{unsafe:args[0].value==='true',token:t[j+1]}:null);
-    }
-    j=end+1;
-   }
-   if(!valid||!built)continue;
-   // After build, only ordinary result unwrapping is allowed by this proof.
-   while(t[j]?.value==='.'&&['unwrap','expect'].includes(t[j+1]?.value)&&t[j+2]?.value==='(')j=pairs.get(j+2)+1;
-   if(t[j]&&![';',')',','].includes(t[j].value)&&j!==fn.end)continue;
-   chains.add(t[i].start);
-   for(const [method,setting]of settings)if(setting?.unsafe&&(method.endsWith('_certs')||backend==='native'))findings.push({ruleId:method.endsWith('_certs')?'RUST-TLS-001':'RUST-TLS-002',file:input.file,line:setting.token.line,col:setting.token.col,source:'sast',confidence:'high'});
+  const resolved=parts=>!localBlocked.has(parts[0])&&!isBlocked(parts[0])&&resolve(parts),candidates=[];
+  if(body.some(x=>x.value==='?')) {
+   const candidate=propagatingFunction(t,pairs,fn.start,fn.end,resolved);
+   if(!candidate)continue;candidates.push(candidate);
+  }else for(let i=fn.start;i<fn.end;i++) {
+   const candidate=builderChain(t,pairs,i,fn.end,resolved);if(candidate)candidates.push(candidate);
    // Continue through argument tokens: eagerly evaluated nested builders carry
    // independent configuration evidence even when the outer chain is safe.
+  }
+  // Commit only after the entire function's chosen subset has validated.
+  analyzed.add(item);
+  for(const candidate of candidates) {
+   chains.add(t[candidate.start].start);
+   for(const [method,setting]of candidate.settings)if(setting?.unsafe&&(method.endsWith('_certs')||candidate.backend==='native'))findings.push({ruleId:method.endsWith('_certs')?'RUST-TLS-001':'RUST-TLS-002',file:input.file,line:setting.token.line,col:setting.token.col,source:'sast',confidence:'high'});
   }
  }
  if(!ownership)record.codes.add('rust-unresolved-crate-or-import');
