@@ -1,0 +1,7 @@
+{
+  "id": "a05-csharp-multiline-sinks",
+  "owasp": "A05",
+  "cwe": [78, 89],
+  "description": "Complete multiline SQL and shell expressions distinguish input composition from fixed command text.",
+  "expect": ["CS-SQLI-001", "CS-CMDI-001"]
+}

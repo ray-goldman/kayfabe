@@ -19,56 +19,91 @@ function splitAtTopLevel(tokens, delimiter) {
   return parts;
 }
 
-function consumeExpression(tokens, start, end) {
-  let depth = 0;
-  for (let i = start; i < end; i++) {
+// Expression reads are confined to one bounded method. A line selects sink starts, not
+// expression ends: never prove a prefix that omits a later argument or operand.
+function completeExpression(tokens, start, call = false, methodEnd = Infinity) {
+  const stack = [], closes = { ')': '(', ']': '[', '}': '{' };
+  for (let i = start; i < tokens.length && tokens[i].end <= methodEnd; i++) {
     const text = tokens[i].text;
-    if (['(', '[', '{'].includes(text)) depth++;
-    else if ([')', ']', '}'].includes(text)) {
-      if (depth === 0) return tokens.slice(start, i);
-      depth--;
-    } else if (text === ';' && depth === 0) return tokens.slice(start, i);
-  }
-  return tokens.slice(start, end);
-}
-
-function sinkExpression(tokens, ruleId, lineStart, lineEnd) {
-  const line = tokens.filter(token => token.start >= lineStart && token.start < lineEnd);
-  if (ruleId === 'CS-CMDI-001') {
-    const expressions = [];
-    for (let i = 0; i + 3 < line.length; i++) {
-      if (line[i].text === 'Process' && line[i + 1].text === '.' && line[i + 2].text === 'Start' && line[i + 3].text === '(') {
-        let depth = 1, end = i + 4;
-        for (; end < line.length && depth; end++) { if (line[end].text === '(') depth++; else if (line[end].text === ')') depth--; }
-        if (depth) return null;
-        const args = splitAtTopLevel(line.slice(i + 4, end - 1), ',');
-        if (args.length < 1 || args.length > 2 || args.some(arg => !arg.length)) return null;
-        expressions.push(...args);
-      }
-    }
-    for (let i = 0; i + 2 < line.length; i++) {
-      if (line[i].text === '.' && line[i + 1].text === 'Arguments' && line[i + 2].text === '=') expressions.push(consumeExpression(line, i + 3, line.length));
-    }
-    return expressions.length ? expressions : null;
-  }
-  if (ruleId === 'CS-SQLI-001') {
-    for (let i = 0; i + 2 < line.length; i++) {
-      if (line[i].text === '.' && line[i + 1].text === 'CommandText' && line[i + 2].text === '=') return [consumeExpression(line, i + 3, line.length)];
-    }
-    for (let i = 0; i + 1 < line.length; i++) {
-      const methodCall = ['FromSqlRaw', 'ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'SqlQueryRaw'].includes(line[i].text);
-      const constructor = line[i].text === 'SqlCommand' && line[i - 1]?.text === 'new';
-      if (!methodCall && !constructor) continue;
-      let open = i + 1;
-      while (open < line.length && line[open].text !== '(') open++;
-      if (open === line.length) return null;
-      let depth = 1, end = open + 1;
-      for (; end < line.length && depth; end++) { if (line[end].text === '(') depth++; else if (line[end].text === ')') depth--; }
-      if (depth) return null;
-      return [splitAtTopLevel(line.slice(open + 1, end - 1), ',')[0]];
+    if (['(', '[', '{'].includes(text)) stack.push(text);
+    else if (closes[text]) {
+      if (!stack.length) return call && text === ')' ? { tokens: tokens.slice(start, i), end: tokens[i].end } : null;
+      if (stack.pop() !== closes[text]) return null;
+    } else if (text === ';') {
+      if (stack.length || call) return null;
+      return { tokens: tokens.slice(start, i), end: tokens[i].end };
     }
   }
   return null;
+}
+
+function sqlCallOpen(tokens, start) {
+  if (tokens[start]?.text === '(') return start;
+  if (tokens[start]?.text !== '<') return -1;
+  // Only a bounded type-argument list may intervene before the call. Expand
+  // the lexer's shift token locally for nested generic closing delimiters.
+  const types = tokens.slice(start, start + 256).flatMap((token, offset) =>
+    (token.text === '>>' ? ['>', '>'] : [token.text]).map(text => ({ ...token, text, index: start + offset })));
+  let cursor = 0;
+  function argumentsAt(depth) {
+    if (depth > 24 || types[cursor++]?.text !== '<' || !typeAt(depth)) return false;
+    while (types[cursor]?.text === ',') { cursor++; if (!typeAt(depth)) return false; }
+    return types[cursor++]?.text === '>';
+  }
+  function typeAt(depth) {
+    if (types[cursor++]?.kind !== 'identifier') return false;
+    if (types[cursor]?.text === '<' && !argumentsAt(depth + 1)) return false;
+    while (['.', '::'].includes(types[cursor]?.text)) {
+      cursor++;
+      if (types[cursor++]?.kind !== 'identifier') return false;
+      if (types[cursor]?.text === '<' && !argumentsAt(depth + 1)) return false;
+    }
+    if (types[cursor]?.text === '?') cursor++;
+    while (types[cursor]?.text === '[' && types[cursor + 1]?.text === ']') cursor += 2;
+    return true;
+  }
+  return argumentsAt(0) && types[cursor]?.text === '(' ? types[cursor].index : -1;
+}
+
+function sinkExpression(tokens, ruleId, lineStart, lineEnd, methodStart = 0, methodEnd = Infinity) {
+  const expressions = [];
+  let multiline = false;
+  const command = ruleId === 'CS-CMDI-001';
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].start >= lineEnd) break;
+    if (tokens[i].start < lineStart) continue;
+    const property = command ? 'Arguments' : 'CommandText';
+    const assignment = tokens[i].text === '.' && tokens[i + 1]?.text === property && tokens[i + 2]?.text === '=';
+    const processCall = command && tokens[i].text === 'Process' && tokens[i + 1]?.text === '.' &&
+      tokens[i + 2]?.text === 'Start' && tokens[i + 3]?.text === '(';
+    const methodCall = !command && ['FromSqlRaw', 'ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'SqlQueryRaw'].includes(tokens[i].text) &&
+      ['(', '<'].includes(tokens[i + 1]?.text);
+    // The scanner's constructor candidate starts at new, which can precede
+    // SqlCommand on another line (including inside another call's arguments).
+    const constructor = !command && tokens[i].text === 'new' && tokens[i + 1]?.text === 'SqlCommand';
+    if (!assignment && !processCall && !methodCall && !constructor) continue;
+    // Check all selected-line anchors before narrowing expression reads. A
+    // field initializer sharing a method's line cannot inherit its proof.
+    if (tokens[i].start < methodStart || tokens[i].end > methodEnd) return null;
+    if (assignment) {
+      const value = completeExpression(tokens, i + 3, false, methodEnd);
+      if (!value?.tokens.length) return null;
+      expressions.push(value.tokens);
+      multiline ||= value.end > lineEnd;
+      continue;
+    }
+    const open = processCall ? i + 3 : constructor ? i + 2 : sqlCallOpen(tokens, i + 1);
+    if (open < 0 || tokens[open]?.text !== '(' || tokens[open].end > methodEnd) return null;
+    const value = completeExpression(tokens, open + 1, true, methodEnd);
+    if (!value?.tokens.length) return null;
+    multiline ||= value.end > lineEnd;
+    const args = splitAtTopLevel(value.tokens, ',');
+    if (args.some(arg => !arg.length) || command && args.length > 2) return null;
+    // SQL's first argument is command text; later arguments are connection or
+    // parameter values, rather than executable SQL. Process.Start needs both.
+    expressions.push(...(command ? args : [args[0]]));
+  }
+  return expressions.length ? { expressions, multiline } : null;
 }
 
 function parseLocalDeclarations(tokens) {
@@ -117,7 +152,8 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   if (typeof code !== 'string' || !Number.isInteger(line) || line < 0 || code.length > 2 * 1024 * 1024 ||
       !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
   if (/\busing\s+(?:String|var)\s*=/.test(code)) return false;
-  const lines = code.split(/\r?\n/);
+  // Keep CR characters in line widths so offsets remain source/token offsets.
+  const lines = code.split('\n');
   if (line >= lines.length) return false;
   const lineStart = lines.slice(0, line).reduce((sum, value) => sum + value.length + 1, 0);
   const lineEnd = lineStart + lines[line].length;
@@ -148,8 +184,14 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
     if (!assignments.has(name)) assignments.set(name, []);
     assignments.get(name).push(tokens.slice(i + 2, end));
   }
-  const expression = sinkExpression(tokens, ruleId, lineStart - method.start, lineEnd - method.start);
-  if (!expression) return false;
+  const sink = sinkExpression(tokens, ruleId, lineStart - method.start, lineEnd - method.start);
+  if (!sink) return false;
+  // The legacy collector is unscoped and does not model these bindings. Do
+  // not extend it to newly complete expressions in such methods: a sibling
+  // literal with the same spelling is not evidence about the actual binding.
+  // The scoped value proof can still establish safety within its own subset.
+  if (sink.multiline && tokens.some(token => ['foreach', 'catch', '=>', 'delegate', 'out', 'is', 'switch', 'fixed'].includes(token.text))) return false;
+  const expression = sink.expressions;
   // Newly supported overloads/multiple sinks use the stricter scoped proof;
   // do not expand the legacy proof's acceptance of unresolved named types.
   if (expression.length > 1) return false;
@@ -187,16 +229,22 @@ function createCSharpConstantSinkProof(code) {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
     parsed ||= parseCSharp(code);
-    if (directConstantSink({ code, line, ruleId, parsed })) return true;
     if (!parsed.complete) return false;
-    const lines = code.split(/\r?\n/);
+    const lines = code.split('\n');
     if (line >= lines.length) return false;
     const start = lines.slice(0, line).reduce((sum, text) => sum + text.length + 1, 0);
+    const end = start + lines[line].length;
+    const methods = parsed.methods.filter(method => method.start < end && method.end > start);
+    if (methods.length !== 1 || methods[0].end - methods[0].start > MAX_METHOD) return false;
+    const method = methods[0];
+    // Both proof paths need the same unique ownership gate. Whole-line
+    // containment alone can miss a local function starting on that line.
+    if (directConstantSink({ code, line, ruleId, parsed })) return true;
     tokens ||= tokenizeCSharp(code).tokens;
-    const expression = sinkExpression(tokens, ruleId, start, start + lines[line].length);
-    if (!expression?.length) return false;
+    const sink = sinkExpression(tokens, ruleId, start, end, method.start, method.end);
+    if (!sink?.expressions.length) return false;
     proveValue ||= createCSharpValueProof(code, parsed);
-    return expression.every(value => proveValue(value));
+    return sink.expressions.every(value => proveValue(value));
   };
 }
 
