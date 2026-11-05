@@ -1,0 +1,7 @@
+{
+  "id": "a05-csharp-named-helper-values",
+  "owasp": "A05",
+  "cwe": [78, 89],
+  "description": "Named private static string helpers prove only the current literal invocation, independently of argument order; dynamic selected values remain SQL/command candidates.",
+  "expect": ["CS-SQLI-001", "CS-CMDI-001"]
+}

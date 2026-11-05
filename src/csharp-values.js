@@ -4,7 +4,18 @@ const { buildDotnetProjectIndex } = require('./dotnet/project-index');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { parenthesizedMutationTokens } = require('./csharp-mutations');
 const SCALARS = new Set(['string', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal']);
+const RESERVED = new Set(('abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while').split(' '));
+const MAX_QUERY_WORK = 65536;
 const id = token => token?.text.replace(/^@/, '');
+const identifier = token => token?.kind === 'identifier' && (token.text.startsWith('@') || !RESERVED.has(token.text));
+
+// One context belongs to one value query, including every recursive alternative.
+// Charging expressions, bindings and call-site scans bounds branching expansion;
+// a new helper invocation must never receive a fresh budget.
+function charge(context, amount = 1) {
+  context.remaining -= amount;
+  return context.remaining >= 0;
+}
 
 function split(tokens, separator) {
   const result = []; let start = 0, depth = 0;
@@ -17,7 +28,18 @@ function split(tokens, separator) {
   return result;
 }
 
-const namedArgument = tokens => tokens[0]?.kind === 'identifier' && tokens[1]?.text === ':';
+// An invalid label (such as a missing name) must not fall through to the
+// positional path, where an unused actual is not necessarily expanded.
+function argumentLabel(tokens) {
+  let depth = 0;
+  for (const token of tokens) {
+    if (['(', '[', '{'].includes(token.text)) depth++;
+    else if ([')', ']', '}'].includes(token.text)) depth--;
+    else if (!depth && token.text === '?') return false;
+    else if (!depth && token.text === ':') return true;
+  }
+  return false;
+}
 
 // This proof deliberately accepts a small subset. All syntactic writes count,
 // including branches not selected by the current caller or build configuration.
@@ -60,7 +82,7 @@ function createCSharpValueProof(code, ast) {
   function buildModel(method) {
     if (models.has(method.id)) return models.get(method.id);
     const ts = tokens.filter(t => t.start > method.bodyStart && t.end < method.bodyEnd);
-    const root = { parent: null, bindings: new Map() }, scopes = new Map(), allBindings = [];
+    const root = { parent: null, bindings: new Map() }, scopes = new Map(), allBindings = [], parameterBindings = [];
     for (const parameter of method.primaryConstructorParameters || []) {
       const binding = { key: method.id + ':primary:' + parameter.name, name: parameter.name, writes: [], invalid: true };
       root.bindings.set(parameter.name, binding); allBindings.push(binding);
@@ -68,6 +90,7 @@ function createCSharpValueProof(code, ast) {
     for (const [n, parameter] of method.parameters.entries()) {
       const binding = { key: method.id + ':param:' + n, name: parameter.name, parameter: n, method, writes: [], invalid: false };
       root.bindings.set(parameter.name, binding); allBindings.push(binding);
+      parameterBindings.push(binding);
     }
     let scope = root;
     const shadowedFields = new Set(ts.filter((t, i) => fields.has(id(t)) && ts[i - 1]?.kind === 'identifier' &&
@@ -106,7 +129,7 @@ function createCSharpValueProof(code, ast) {
       while (current) { if (current.bindings.has(id(token))) return current.bindings.get(id(token)); current = current.parent; }
       return shadowedFields.has(id(token)) ? null : fields.get(id(token));
     }
-    const model = { method, ts, invalid, bindingAt, returns: [] };
+    const model = { method, ts, invalid, bindingAt, parameterBindings, returns: [] };
     models.set(method.id, model);
     for (const token of wrappedWrites || []) {
       const binding = bindingAt(token);
@@ -168,8 +191,56 @@ function createCSharpValueProof(code, ast) {
     if (shadowedName(name)) return null;
     return models.get(matches[0].id);
   }
-  function proveBinding(binding, visiting, depth) {
-    if (!binding || binding.invalid || visiting.has(binding.key)) return false;
+  // This is deliberately separate from the legacy all-callers parameter proof.
+  // Every actual is an exact built-in string literal, even if it is not returned:
+  // no ignored conversion, getter, call or condition may execute along this path.
+  function proveNamed(args, callee, caller, prefix, visiting, depth, context) {
+    if (!charge(context, callee.ts.length + caller.ts.length + args.length + ownerOpen - ownerStart) || callee.invalid || !callee.method.static ||
+        prefix.length === 3 && prefix[0].text === 'this' ||
+        caller.ts.some((t, i) => ['catch', 'delegate', 'from'].includes(t.text) ||
+          id(t) === callee.method.name && caller.ts[i + 1]?.text !== '(' ||
+          prefix.length === 3 && id(t) === id(prefix[0]) && caller.ts[i + 1]?.text !== '.')) return false;
+    const nameIndex = positions.get(callee.method.start);
+    let start = nameIndex - 1;
+    while (start >= 0 && ![';', '{', '}'].includes(tokens[start].text)) start--;
+    const declaration = tokens.slice(start + 1, nameIndex).map(t => t.text);
+    if (declaration.length !== 3 || declaration[2] !== 'string' ||
+        !declaration.slice(0, 2).includes('private') || !declaration.slice(0, 2).includes('static')) return false;
+    if (!identifier(tokens[nameIndex]) || prefix.length === 3 && !identifier(prefix[0])) return false;
+    // Generic owners/bases remain outside the new subset; no framework spelling
+    // establishes identity. For ordinary inherited owners the private declared
+    // member is applicable by identity conversion on every exact string actual.
+    // C# member lookup therefore stops at this owner rather than using base methods.
+    if (tokens.slice(ownerStart, ownerOpen).some(t => t.text === '<')) return false;
+    const open = nameIndex + 1, close = pairs.get(open);
+    if (tokens[open]?.text !== '(' || tokens[close + 1]?.start !== callee.method.bodyStart) return false;
+    const parameters = split(tokens.slice(open + 1, close), ',');
+    if (parameters.length !== args.length || parameters.length !== callee.parameterBindings.length) return false;
+    const byName = new Map();
+    for (let n = 0; n < parameters.length; n++) {
+      const part = parameters[n], binding = callee.parameterBindings[n];
+      if (part.length !== 2 || part[0].text !== 'string' || !identifier(part[1]) ||
+          byName.has(id(part[1])) || binding.invalid || binding.writes.length ||
+          binding.name !== id(part[1]) || callee.method.parameterTypes[n] !== 'string') return false;
+      byName.set(binding.name, binding);
+    }
+    const frame = new Map();
+    for (const arg of args) {
+      if (!charge(context, arg.length) || arg.length !== 3 || !identifier(arg[0]) || arg[1].text !== ':' ||
+          arg[2].kind !== 'string' || arg[2].text.endsWith('u8')) return false;
+      const binding = byName.get(id(arg[0]));
+      if (!binding || frame.has(binding.key)) return false;
+      frame.set(binding.key, { expression: arg.slice(2), model: caller });
+    }
+    const body = callee.ts;
+    if (body.length !== 3 || body[0].text !== 'return' || !identifier(body[1]) || body[2].text !== ';') return false;
+    const returned = callee.bindingAt(body[1]);
+    if (!returned || returned.invalid || returned.parameter === undefined || returned.writes.length) return false;
+    const actual = frame.get(returned.key);
+    return !!actual && prove(actual.expression, actual.model, visiting, depth + 1, context);
+  }
+  function proveBinding(binding, visiting, depth, context) {
+    if (!charge(context) || !binding || binding.invalid || visiting.has(binding.key)) return false;
     const next = new Set(visiting); next.add(binding.key);
     if (binding.parameter !== undefined) {
       if (!scalar(binding.method.parameterTypes[binding.parameter])) return false;
@@ -177,6 +248,7 @@ function createCSharpValueProof(code, ast) {
       if (!target) return false;
       let sites = 0;
       for (let i = 0; i < tokens.length; i++) {
+        if (!charge(context)) return false;
         if (id(tokens[i]) !== target.method.name || tokens[i].start === target.method.start) continue;
         if (tokens[i + 1]?.text !== '(' || !pairs.has(i + 1) ||
             tokens[i - 1]?.text === '.' && !['this', owner.name].includes(id(tokens[i - 2]))) return false;
@@ -184,15 +256,15 @@ function createCSharpValueProof(code, ast) {
         const caller = modelAt(tokens[i]);
         if (!caller || caller.invalid) return false;
         const args = split(tokens.slice(i + 2, pairs.get(i + 1)), ',');
-        if (args.length !== target.method.arity || args.some(namedArgument) || !prove(args[binding.parameter], caller, next, depth + 1)) return false;
+        if (args.length !== target.method.arity || args.some(arg => !arg.length || argumentLabel(arg)) || !prove(args[binding.parameter], caller, next, depth + 1, context)) return false;
         sites++;
       }
       return sites > 0;
     }
-    return (binding.field || binding.writes.length > 0) && binding.writes.every(write => !write.model.invalid && prove(write.expression, write.model, next, depth + 1));
+    return (binding.field || binding.writes.length > 0) && binding.writes.every(write => charge(context) && !write.model.invalid && prove(write.expression, write.model, next, depth + 1, context));
   }
-  function prove(expression, model, visiting = new Set(), depth = 0) {
-    if (!model || model.invalid || !expression?.length || expression.length > 256 || depth > 24) return false;
+  function prove(expression, model, visiting, depth, context) {
+    if (!charge(context, 1 + (expression?.length || 0)) || !model || model.invalid || !expression?.length || expression.length > 256 || depth > 24) return false;
     while (expression[0]?.text === '(' && expression.at(-1)?.text === ')' &&
         pairs.get(positions.get(expression[0].start)) === positions.get(expression.at(-1).start)) expression = expression.slice(1, -1);
     // The condition may be unknown; both possible values must be proved safe.
@@ -204,21 +276,21 @@ function createCSharpValueProof(code, ast) {
       else if (!level && text === '?') { if (question < 0) question = i; else nested++; }
       else if (!level && text === ':' && question >= 0) {
         if (nested) { nested--; continue; }
-        return question > 0 && prove(expression.slice(question + 1, i), model, visiting, depth + 1) &&
-          prove(expression.slice(i + 1), model, visiting, depth + 1);
+        return question > 0 && prove(expression.slice(question + 1, i), model, visiting, depth + 1, context) &&
+          prove(expression.slice(i + 1), model, visiting, depth + 1, context);
       }
     }
     if (question >= 0) return false;
     const coalesced = split(expression, '??');
-    if (coalesced.length > 1) return coalesced.every(part => prove(part, model, visiting, depth + 1));
+    if (coalesced.length > 1) return coalesced.every(part => prove(part, model, visiting, depth + 1, context));
     const parts = split(expression, '+');
-    if (parts.length > 1) return parts.every(part => prove(part, model, visiting, depth + 1));
+    if (parts.length > 1) return parts.every(part => prove(part, model, visiting, depth + 1, context));
     if (expression.length === 1) {
       const token = expression[0];
       if (['string','char','number'].includes(token.kind) || ['true','false','null'].includes(token.text)) return true;
-      return token.kind === 'identifier' && proveBinding(model.bindingAt(token), visiting, depth + 1);
+      return token.kind === 'identifier' && proveBinding(model.bindingAt(token), visiting, depth + 1, context);
     }
-    if (expression.length === 3 && expression[0].text === 'this' && expression[1].text === '.') return proveBinding(fields.get(id(expression[2])), visiting, depth + 1);
+    if (expression.length === 3 && expression[0].text === 'this' && expression[1].text === '.') return proveBinding(fields.get(id(expression[2])), visiting, depth + 1, context);
     let open = expression.findIndex(t => t.text === '(');
     if (open < 1 || pairs.get(positions.get(expression[open].start)) !== positions.get(expression.at(-1).start)) return false;
     const prefix = expression.slice(0, open);
@@ -226,13 +298,14 @@ function createCSharpValueProof(code, ast) {
     if (prefix.length === 3 && id(prefix[0]) !== 'this' && shadowedName(id(prefix[0]))) return false;
     const callee = helper(id(prefix.at(-1)));
     const args = expression.length === open + 2 ? [] : split(expression.slice(open + 1, -1), ',');
-    if (!callee || callee.method.arity !== args.length || args.some(namedArgument) || !callee.returns.length || visiting.has(callee.method.id)) return false;
+    if (!charge(context) || !callee || callee.method.arity !== args.length || args.some(arg => !arg.length) || !callee.returns.length || visiting.has(callee.method.id)) return false;
     const nameIndex=positions.get(callee.method.start);
     if (!scalar(tokens[nameIndex-1]?.text)) return false;
     const next = new Set(visiting); next.add(callee.method.id);
-    return callee.returns.every(result => prove(result, callee, next, depth + 1));
+    if (args.some(argumentLabel)) return proveNamed(args, callee, model, prefix, next, depth + 1, context);
+    return callee.returns.every(result => charge(context) && prove(result, callee, next, depth + 1, context));
   }
-  return expression => prove(expression, modelAt(expression?.[0]));
+  return expression => prove(expression, modelAt(expression?.[0]), new Set(), 0, { remaining: MAX_QUERY_WORK });
 }
 
 module.exports = { createCSharpValueProof };

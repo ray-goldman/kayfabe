@@ -49,6 +49,35 @@ require a complete right-hand expression ending with a semicolon. `SqlCommand`
 construction and the supported raw SQL methods require constant SQL text in the
 first argument; connection objects and parameter values are not executable SQL.
 Nested calls still use the existing bounded private-helper/value proof.
+All-named calls have a separate, deliberately narrow invocation proof: one
+uniquely declared, explicitly private static helper with required unique keyword
+`string` parameters, keyword `string` return type, and body containing only
+`return <formal>;`. Every actual must be one non-interpolated string literal
+token, including unused actuals. Regular, verbatim and raw strings qualify;
+UTF-8 literals, identifiers, conversions, getters, calls, parenthesized values,
+conditions and other expressions do not. Names are case-sensitive and escaped
+identifiers normalize consistently; the invocation maps each actual to its
+formal binding identity, independent of written argument order. No helper result
+is cached across calls. Mixed, missing, extra, empty, duplicate or unknown names,
+optional/ref/out/in/params forms, overloads, generics and helper writes decline
+this proof. Only unqualified or unshadowed same-owner static receivers qualify.
+Caller catch/delegate/query bindings remain outside this named-call subset.
+Unresolved caller occurrences of the helper or static receiver name also decline
+the proof, including deconstructed bindings and method-group references.
+
+An ordinary inherited owner can qualify because the known private member is
+applicable by built-in string identity conversion for every named actual; lookup
+therefore resolves at that owner without guessing external base members. The
+base's spelling supplies no evidence. Inapplicable/custom-type declarations,
+generic owners/bases, foreign receivers, shadowed names and multiple owners
+remain unknown. Existing positional behavior and the all-visible-callers proof
+for a sink physically inside a helper remain separate; one safe invocation
+never establishes safety of that helper's input at every caller.
+
+Each value-proof query has one shared 65,536-unit expansion budget, charged for
+expression tokens, binding visits, named caller/body traversal, call-site scans,
+helper expansions and return/write alternatives. Recursive calls share the same
+budget; exhaustion retains the candidate. Later queries receive fresh budgets.
 Raw SQL method calls retain bounded generic type argument support, including
 qualified names, nested generic types and simple array types before the call.
 
