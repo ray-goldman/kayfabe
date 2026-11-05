@@ -121,3 +121,56 @@ test('scanner retains nested and out-of-method SQL candidates sharing a safe sin
     ['FieldCRLF.cs', 2], ['FieldLF.cs', 2], ['NestedCRLF.cs', 3], ['NestedLF.cs', 3],
   ]);
 });
+
+const bindingBodies = {
+  localFunction: sink => `void Local(string value) { ${sink} }\n Local(input);`,
+  foreach: sink => `foreach (string value in new[] { input }) { ${sink} }`,
+  catch: sink => `try { Work(); } catch (System.Exception value) { ${sink} }`,
+  parenthesizedLambda: sink => `System.Action<string> act = (value) => { ${sink} };\n act(input);`,
+  typedLambda: sink => `System.Action<string> act = (string value) => { ${sink} };\n act(input);`,
+  simpleLambda: sink => `System.Action<string> act = value => { ${sink} };\n act(input);`,
+  anonymousDelegate: sink => `System.Action<string> act = delegate (string value) { ${sink} };\n act(input);`,
+  forInitializer: sink => `for (string value = input; value != null; value = null) { ${sink} }`,
+  typedOut: sink => `{ TryGet(input, out string value); ${sink} }`,
+  pattern: sink => `{ if (((object)input) is string value) { ${sink} } }`,
+};
+
+function bindingFixture(body, eol, ownLine = false) {
+  const sink = `${ownLine ? '\n' : ''}command.CommandText = "select " + // sink\n value;`;
+  return `class Sample {\n void Run(string input) {\n { string value = "fixed"; }\n ${body(sink)}\n }\n private static bool TryGet(string input, out string result) { result = input; return true; }\n}`.replace(/\n/g, eol);
+}
+
+for (const [form, body] of Object.entries(bindingBodies)) {
+  for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+    test(`multiline ${form} cannot inherit a sibling block literal (${ending})`, () => {
+      for (const ownLine of [false, true]) {
+        const code = bindingFixture(body, eol, ownLine);
+        const line = code.split('\n').findIndex(text => text.includes('// sink'));
+        assert.equal(createCSharpConstantSinkProof(code)(line, 'CS-SQLI-001'), false, String(ownLine));
+      }
+    });
+  }
+}
+
+test('unsupported multiline binding scopes do not block ordinary proven constant bindings', () => {
+  assert.equal(proof(' { string other = "ignored"; }\n const string value = "1";\n command.CommandText = "SELECT " + // sink\n value;', 'CS-SQLI-001'), true);
+  assert.equal(proof(' const string value = "status";\n var info = new ProcessStartInfo("cmd.exe") { UseShellExecute = false };\n info.Arguments = "/c echo " + // sink\n value;'), true);
+  assert.equal(proof(' void Local() { command.CommandText = "SELECT " + // sink\n "1"; }', 'CS-SQLI-001'), false);
+});
+
+test('scanner retains all unsupported-binding twins in both line layouts and endings', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-binding-ownership-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [form, body] of Object.entries(bindingBodies)) {
+    for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+      for (const ownLine of [false, true]) {
+        const file = `${form}${ending}${ownLine}.cs`;
+        fs.writeFileSync(path.join(root, file), bindingFixture(body, eol, ownLine));
+        expected.push(file);
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => f.ruleId === 'CS-SQLI-001').map(f => f.file).sort(), expected.sort());
+});

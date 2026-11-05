@@ -8,6 +8,11 @@ must pass. Line widths preserve CRLF characters so source and token offsets agre
 SQL constructors are anchored at `new`, including when `SqlCommand` begins on a
 later line. Every selected-line sink anchor must belong to the chosen method;
 a field initializer sharing that line prevents a method-only safety proof.
+The same unique-method gate applies before either proof path, including local
+functions beginning on the candidate line. Newly multiline expressions in methods
+with unsupported binding forms (foreach, catch, lambdas, anonymous delegates,
+out declarations, patterns, switch or fixed) defer to the scoped value proof;
+the legacy collector cannot resolve those bindings from a sibling literal.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

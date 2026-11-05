@@ -16,4 +16,10 @@ public class Operations {
         db.ExecuteSqlRaw("SELECT " + "1", new
             SqlCommand("SELECT '" + name + "'", connection).ExecuteReader());
     }
+    public void Filter(string input, SqlCommand command) {
+        foreach (string value in new[] { input }) {
+            command.CommandText = "SELECT Id FROM Tasks WHERE Name = @name";
+            command.Parameters.AddWithValue("@name", value);
+        }
+    }
 }

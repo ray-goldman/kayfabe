@@ -27,11 +27,11 @@ function completeExpression(tokens, start, call = false, methodEnd = Infinity) {
     const text = tokens[i].text;
     if (['(', '[', '{'].includes(text)) stack.push(text);
     else if (closes[text]) {
-      if (!stack.length) return call && text === ')' ? tokens.slice(start, i) : null;
+      if (!stack.length) return call && text === ')' ? { tokens: tokens.slice(start, i), end: tokens[i].end } : null;
       if (stack.pop() !== closes[text]) return null;
     } else if (text === ';') {
       if (stack.length || call) return null;
-      return tokens.slice(start, i);
+      return { tokens: tokens.slice(start, i), end: tokens[i].end };
     }
   }
   return null;
@@ -67,6 +67,7 @@ function sqlCallOpen(tokens, start) {
 
 function sinkExpression(tokens, ruleId, lineStart, lineEnd, methodStart = 0, methodEnd = Infinity) {
   const expressions = [];
+  let multiline = false;
   const command = ruleId === 'CS-CMDI-001';
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].start >= lineEnd) break;
@@ -86,21 +87,23 @@ function sinkExpression(tokens, ruleId, lineStart, lineEnd, methodStart = 0, met
     if (tokens[i].start < methodStart || tokens[i].end > methodEnd) return null;
     if (assignment) {
       const value = completeExpression(tokens, i + 3, false, methodEnd);
-      if (!value?.length) return null;
-      expressions.push(value);
+      if (!value?.tokens.length) return null;
+      expressions.push(value.tokens);
+      multiline ||= value.end > lineEnd;
       continue;
     }
     const open = processCall ? i + 3 : constructor ? i + 2 : sqlCallOpen(tokens, i + 1);
     if (open < 0 || tokens[open]?.text !== '(' || tokens[open].end > methodEnd) return null;
     const value = completeExpression(tokens, open + 1, true, methodEnd);
-    if (!value?.length) return null;
-    const args = splitAtTopLevel(value, ',');
+    if (!value?.tokens.length) return null;
+    multiline ||= value.end > lineEnd;
+    const args = splitAtTopLevel(value.tokens, ',');
     if (args.some(arg => !arg.length) || command && args.length > 2) return null;
     // SQL's first argument is command text; later arguments are connection or
     // parameter values, rather than executable SQL. Process.Start needs both.
     expressions.push(...(command ? args : [args[0]]));
   }
-  return expressions.length ? expressions : null;
+  return expressions.length ? { expressions, multiline } : null;
 }
 
 function parseLocalDeclarations(tokens) {
@@ -181,8 +184,14 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
     if (!assignments.has(name)) assignments.set(name, []);
     assignments.get(name).push(tokens.slice(i + 2, end));
   }
-  const expression = sinkExpression(tokens, ruleId, lineStart - method.start, lineEnd - method.start);
-  if (!expression) return false;
+  const sink = sinkExpression(tokens, ruleId, lineStart - method.start, lineEnd - method.start);
+  if (!sink) return false;
+  // The legacy collector is unscoped and does not model these bindings. Do
+  // not extend it to newly complete expressions in such methods: a sibling
+  // literal with the same spelling is not evidence about the actual binding.
+  // The scoped value proof can still establish safety within its own subset.
+  if (sink.multiline && tokens.some(token => ['foreach', 'catch', '=>', 'delegate', 'out', 'is', 'switch', 'fixed'].includes(token.text))) return false;
+  const expression = sink.expressions;
   // Newly supported overloads/multiple sinks use the stricter scoped proof;
   // do not expand the legacy proof's acceptance of unresolved named types.
   if (expression.length > 1) return false;
@@ -220,7 +229,6 @@ function createCSharpConstantSinkProof(code) {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
     parsed ||= parseCSharp(code);
-    if (directConstantSink({ code, line, ruleId, parsed })) return true;
     if (!parsed.complete) return false;
     const lines = code.split('\n');
     if (line >= lines.length) return false;
@@ -229,11 +237,14 @@ function createCSharpConstantSinkProof(code) {
     const methods = parsed.methods.filter(method => method.start < end && method.end > start);
     if (methods.length !== 1 || methods[0].end - methods[0].start > MAX_METHOD) return false;
     const method = methods[0];
+    // Both proof paths need the same unique ownership gate. Whole-line
+    // containment alone can miss a local function starting on that line.
+    if (directConstantSink({ code, line, ruleId, parsed })) return true;
     tokens ||= tokenizeCSharp(code).tokens;
-    const expression = sinkExpression(tokens, ruleId, start, end, method.start, method.end);
-    if (!expression?.length) return false;
+    const sink = sinkExpression(tokens, ruleId, start, end, method.start, method.end);
+    if (!sink?.expressions.length) return false;
     proveValue ||= createCSharpValueProof(code, parsed);
-    return expression.every(value => proveValue(value));
+    return sink.expressions.every(value => proveValue(value));
   };
 }
 
