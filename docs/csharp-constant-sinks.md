@@ -5,6 +5,9 @@ selected call or assignment inside a uniquely identified method. A candidate lin
 selects sink starts; expressions can continue onto later lines. Separate lines
 remain separate candidates, while every matching sink beginning on the same line
 must pass. Line widths preserve CRLF characters so source and token offsets agree.
+SQL constructors are anchored at `new`, including when `SqlCommand` begins on a
+later line. Every selected-line sink anchor must belong to the chosen method;
+a field initializer sharing that line prevents a method-only safety proof.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

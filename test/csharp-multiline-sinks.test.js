@@ -38,6 +38,22 @@ for (const eol of ['\n', '\r\n']) {
       assert.equal(proof(` ${call}("select " // sink\n + input, connection);`, 'CS-SQLI-001', eol), false, call);
     }
   });
+  test(`nested SQL constructors are selected at new on the candidate line (${label})`, () => {
+    assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + input, connection).ExecuteReader());', 'CS-SQLI-001', eol), false);
+    assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new SqlCommand("SELECT " + input, connection).ExecuteReader()); // sink', 'CS-SQLI-001', eol), false);
+    assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + "2", connection).ExecuteReader());', 'CS-SQLI-001', eol), true);
+    assert.equal(proof(' new // sink\n SqlCommand("SELECT " + "2", connection);', 'CS-SQLI-001', eol), true);
+  });
+  test(`same-line SQL candidates outside the method prevent partial proof (${label})`, () => {
+    for (const fieldValue of ['GetInput()', '"2"']) {
+      const code = `class Sample {\n SqlCommand field = new SqlCommand("SELECT " + ${fieldValue}); void Run() { command.CommandText = "SELECT " +\n "1"; }\n}`.replace(/\n/g, eol);
+      assert.equal(createCSharpConstantSinkProof(code)(1, 'CS-SQLI-001'), false, fieldValue);
+    }
+    for (const name of ['field', 'ExecuteSqlRaw']) {
+      const code = `class Sample {\n string ${name} = "fixed"; void Run() { command.CommandText = "SELECT " +\n "1"; }\n}`.replace(/\n/g, eol);
+      assert.equal(createCSharpConstantSinkProof(code)(1, 'CS-SQLI-001'), true);
+    }
+  });
 }
 
 test('nested private constant helpers keep expression ownership', () => {
@@ -89,4 +105,17 @@ test('scanner removes multiline constant findings and retains dynamic twins', as
   const result = await scan(root, { includeTests: true });
   assert.deepEqual(result.findings.filter(f => ['CS-CMDI-001', 'CS-SQLI-001'].includes(f.ruleId))
     .map(f => [f.file, f.ruleId]).sort(), [['Input.cs', 'CS-CMDI-001'], ['Input.cs', 'CS-SQLI-001']]);
+});
+
+test('scanner retains nested and out-of-method SQL candidates sharing a safe sink line', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-sql-line-ownership-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+    fs.writeFileSync(path.join(root, `Nested${ending}.cs`), 'class Sample {\n void Run(string input) {\n db.ExecuteSqlRaw("SELECT " + "1", new\n SqlCommand("SELECT " + input, connection).ExecuteReader());\n }\n}'.replace(/\n/g, eol));
+    fs.writeFileSync(path.join(root, `Field${ending}.cs`), 'class Sample {\n SqlCommand field = new SqlCommand("SELECT " + GetInput()); void Run() { command.CommandText = "SELECT " +\n "1"; }\n}'.replace(/\n/g, eol));
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => f.ruleId === 'CS-SQLI-001').map(f => [f.file, f.line]).sort(), [
+    ['FieldCRLF.cs', 2], ['FieldLF.cs', 2], ['NestedCRLF.cs', 3], ['NestedLF.cs', 3],
+  ]);
 });

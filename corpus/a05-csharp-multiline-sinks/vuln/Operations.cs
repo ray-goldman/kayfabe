@@ -12,5 +12,7 @@ public class Operations {
         Process.Start(options);
         command.CommandText = "SELECT Id FROM Tasks WHERE Name = '" +
             input + "'";
+        db.ExecuteSqlRaw("SELECT " + "1", new
+            SqlCommand("SELECT " + input, connection).ExecuteReader());
     }
 }

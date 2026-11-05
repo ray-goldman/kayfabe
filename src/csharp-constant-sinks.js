@@ -19,11 +19,11 @@ function splitAtTopLevel(tokens, delimiter) {
   return parts;
 }
 
-// Tokens are confined to one bounded method. A line selects sink starts, not
+// Expression reads are confined to one bounded method. A line selects sink starts, not
 // expression ends: never prove a prefix that omits a later argument or operand.
-function completeExpression(tokens, start, call = false) {
+function completeExpression(tokens, start, call = false, methodEnd = Infinity) {
   const stack = [], closes = { ')': '(', ']': '[', '}': '{' };
-  for (let i = start; i < tokens.length; i++) {
+  for (let i = start; i < tokens.length && tokens[i].end <= methodEnd; i++) {
     const text = tokens[i].text;
     if (['(', '[', '{'].includes(text)) stack.push(text);
     else if (closes[text]) {
@@ -65,30 +65,34 @@ function sqlCallOpen(tokens, start) {
   return argumentsAt(0) && types[cursor]?.text === '(' ? types[cursor].index : -1;
 }
 
-function sinkExpression(tokens, ruleId, lineStart, lineEnd) {
+function sinkExpression(tokens, ruleId, lineStart, lineEnd, methodStart = 0, methodEnd = Infinity) {
   const expressions = [];
+  const command = ruleId === 'CS-CMDI-001';
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].start < lineStart || tokens[i].start >= lineEnd) continue;
-    const command = ruleId === 'CS-CMDI-001';
+    if (tokens[i].start >= lineEnd) break;
+    if (tokens[i].start < lineStart) continue;
     const property = command ? 'Arguments' : 'CommandText';
-    if (tokens[i].text === '.' && tokens[i + 1]?.text === property && tokens[i + 2]?.text === '=') {
-      const value = completeExpression(tokens, i + 3);
+    const assignment = tokens[i].text === '.' && tokens[i + 1]?.text === property && tokens[i + 2]?.text === '=';
+    const processCall = command && tokens[i].text === 'Process' && tokens[i + 1]?.text === '.' &&
+      tokens[i + 2]?.text === 'Start' && tokens[i + 3]?.text === '(';
+    const methodCall = !command && ['FromSqlRaw', 'ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'SqlQueryRaw'].includes(tokens[i].text) &&
+      ['(', '<'].includes(tokens[i + 1]?.text);
+    // The scanner's constructor candidate starts at new, which can precede
+    // SqlCommand on another line (including inside another call's arguments).
+    const constructor = !command && tokens[i].text === 'new' && tokens[i + 1]?.text === 'SqlCommand';
+    if (!assignment && !processCall && !methodCall && !constructor) continue;
+    // Check all selected-line anchors before narrowing expression reads. A
+    // field initializer sharing a method's line cannot inherit its proof.
+    if (tokens[i].start < methodStart || tokens[i].end > methodEnd) return null;
+    if (assignment) {
+      const value = completeExpression(tokens, i + 3, false, methodEnd);
       if (!value?.length) return null;
       expressions.push(value);
+      continue;
     }
-    let open;
-    if (command) {
-      if (tokens[i].text !== 'Process' || tokens[i + 1]?.text !== '.' ||
-          tokens[i + 2]?.text !== 'Start' || tokens[i + 3]?.text !== '(') continue;
-      open = i + 3;
-    } else {
-      const methodCall = ['FromSqlRaw', 'ExecuteSqlRaw', 'ExecuteSqlRawAsync', 'SqlQueryRaw'].includes(tokens[i].text);
-      const constructor = tokens[i].text === 'SqlCommand' && tokens[i - 1]?.text === 'new';
-      if (!methodCall && !constructor) continue;
-      open = methodCall ? sqlCallOpen(tokens, i + 1) : i + 1;
-      if (open < 0 || tokens[open]?.text !== '(') return null;
-    }
-    const value = completeExpression(tokens, open + 1, true);
+    const open = processCall ? i + 3 : constructor ? i + 2 : sqlCallOpen(tokens, i + 1);
+    if (open < 0 || tokens[open]?.text !== '(' || tokens[open].end > methodEnd) return null;
+    const value = completeExpression(tokens, open + 1, true, methodEnd);
     if (!value?.length) return null;
     const args = splitAtTopLevel(value, ',');
     if (args.some(arg => !arg.length) || command && args.length > 2) return null;
@@ -226,7 +230,7 @@ function createCSharpConstantSinkProof(code) {
     if (methods.length !== 1 || methods[0].end - methods[0].start > MAX_METHOD) return false;
     const method = methods[0];
     tokens ||= tokenizeCSharp(code).tokens;
-    const expression = sinkExpression(tokens.filter(token => token.start >= method.start && token.end <= method.end), ruleId, start, end);
+    const expression = sinkExpression(tokens, ruleId, start, end, method.start, method.end);
     if (!expression?.length) return false;
     proveValue ||= createCSharpValueProof(code, parsed);
     return expression.every(value => proveValue(value));
