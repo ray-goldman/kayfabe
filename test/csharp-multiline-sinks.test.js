@@ -39,6 +39,8 @@ for (const eol of ['\n', '\r\n']) {
     }
   });
   test(`nested SQL constructors are selected at new on the candidate line (${label})`, () => {
+    assert.equal(proof(' var value = "1";\n new SqlCommand("SELECT " + value, connection); // sink', 'CS-SQLI-001', eol), true);
+    assert.equal(proof(' var value = "1";\n new // sink\n SqlCommand("SELECT " + value, connection);', 'CS-SQLI-001', eol), true);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + input, connection).ExecuteReader());', 'CS-SQLI-001', eol), false);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new SqlCommand("SELECT " + input, connection).ExecuteReader()); // sink', 'CS-SQLI-001', eol), false);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + "2", connection).ExecuteReader());', 'CS-SQLI-001', eol), true);
