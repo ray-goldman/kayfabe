@@ -128,3 +128,58 @@ test('scanner retains primary inputs and suppresses independent literal locals',
     ['Unsafe.cs', 'CS-CMDI-001'], ['Unsafe.cs', 'CS-SQLI-001'],
   ]);
 });
+
+const primaryBindings = {
+  localFunction: sink => `void Local(string value) { ${sink} } Local(input);`,
+  foreach: sink => `foreach (string value in new[] { input }) { ${sink} }`,
+  catch: sink => `try { Work(); } catch (System.Exception value) { ${sink} }`,
+  parenthesizedLambda: sink => `System.Action<string> act = (value) => { ${sink} }; act(input);`,
+  typedLambda: sink => `System.Action<string> act = (string value) => { ${sink} }; act(input);`,
+  simpleLambda: sink => `System.Action<string> act = value => { ${sink} }; act(input);`,
+  anonymousDelegate: sink => `System.Action<string> act = delegate (string value) { ${sink} }; act(input);`,
+  forInitializer: sink => `for (string value = input; value != null; value = null) { ${sink} }`,
+  typedOut: sink => `{ TryGet(input, out string value); ${sink} }`,
+  pattern: sink => `{ if (((object)input) is string value) { ${sink} } }`,
+};
+
+test('unrelated unsupported declarations and named default parameters do not block keyword locals', () => {
+  for (const [rule, lhs] of [['CS-SQLI-001', 'command.CommandText'], ['CS-CMDI-001', 'info.Arguments']]) {
+    const source = `class Other {}\nclass Sample(string connectionString) {\n public void Run(CancellationToken cancellationToken = default) {\n using var connection = new SqlConnection(connectionString);\n const string value = "fixed";\n ${lhs} = "prefix " + // sink\n value;\n }\n}`;
+    assert.equal(prove(source, rule), true);
+  }
+});
+
+for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+  for (const [form, body] of Object.entries(primaryBindings)) {
+    for (const [rule, lhs] of [['CS-SQLI-001', 'command.CommandText'], ['CS-CMDI-001', 'info.Arguments']]) {
+      test(`primary single-line ${form} keeps its own ${rule} binding (${ending})`, () => {
+        const sink = `${lhs} = "prefix " + value; // sink\n`;
+        const source = `class Sample(string input) {\n void Run() {\n { string value = "fixed"; }\n ${body(sink)}\n }\n private bool TryGet(string input, out string result) { result = input; return true; }\n}`;
+        assert.equal(prove(source, rule, eol), false);
+      });
+    }
+  }
+  test(`primary local type identity is required for SQL and command proofs (${ending})`, () => {
+    const conversion = name => `class ${name} { public static implicit operator ${name}(string value) => new ${name}(); public override string ToString() => System.Environment.GetEnvironmentVariable("QUERY"); }\n`;
+    for (const [rule, lhs] of [['CS-SQLI-001', 'command.CommandText'], ['CS-CMDI-001', 'info.Arguments']]) {
+      for (const [prefix, type] of [
+        ['', 'string'], ['', 'var'], ['', 'String'],
+        [conversion('var'), 'var'], [conversion('String'), 'String'],
+        ['using Text = External.Text;\n', 'Text'],
+        ['using var = External.Text;\n', 'var'],
+        ['using String = External.Text;\n', 'String'],
+        [`using External;\nnamespace External { ${conversion('String')} }\n`, 'String'],
+        [`using External;\nnamespace External { ${conversion('var')} }\n`, 'var'],
+      ]) {
+        for (const primary of ['(string input)', '()']) {
+          const source = `${prefix}class Sample${primary} {\n void Run() { ${type} value = "fixed";\n ${lhs} = "prefix " + value; // sink\n }\n}`;
+          assert.equal(prove(source, rule, eol), type === 'string', `${type} ${prefix} ${primary}`);
+        }
+      }
+      for (const declaration of ['Text value = "fixed";', 'Text first = "fixed", value = "fixed";', 'Text[] value = "fixed";']) {
+        const source = `class Sample(string input) {\n void Run() {\n { string value = "unrelated"; }\n { ${declaration}\n ${lhs} = "prefix " + value; // sink\n } }\n}`;
+        assert.equal(prove(source, rule, eol), false, declaration);
+      }
+    }
+  });
+}

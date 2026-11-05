@@ -131,6 +131,7 @@ function parseCSharp(source) {
     const primaryOwners = owners.filter(type => type.hasPrimary);
     methods.push({ name, start: nameToken.start, end: tokens[endIndex].end, declarationStart, startLine: lineAt(nameToken.start), endLine: lineAt(tokens[endIndex].end), bodyStart: tokens[body].start, bodyEnd: tokens[endIndex].end, parameters, visibility, statements,
       primaryConstructorParameters: primaryOwners.flatMap(type => type.parameters),
+      hasPrimaryConstructor: primaryOwners.length > 0,
       primaryConstructorUnsupported: primaryOwners.some(type => type.unsupported) || primaryOwners.length > 0 && owners.length !== 1 });
     i = body;
   }

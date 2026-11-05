@@ -26,6 +26,10 @@ Known constructor-header diagnostics carry their owning type's source range.
 An existing local proof in a disjoint type can proceed only when every parser
 error is one of these scoped diagnostics. Lexical and structural errors still
 block all proofs; the file remains incomplete for parser and project coverage.
+Newly eligible primary-owner methods also apply unsupported-binding guards to
+single-line sinks. Their legacy local proof requires exact keyword scalar types;
+unresolved `var`, `String`, aliases and other named types cannot inherit a
+same-named sibling literal. Empty primary parameter lists use the same boundary.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

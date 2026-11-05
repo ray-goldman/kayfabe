@@ -10,4 +10,14 @@ class Primary(string input)
             input + "'", connection);
         Process.Start("cmd.exe", "/c echo " + input);
     }
+
+    void Iterate(string[] inputs, SqlCommand command, ProcessStartInfo info)
+    {
+        foreach (string value in inputs)
+        {
+            command.CommandText = "SELECT Name FROM Items WHERE Name = '" + value + "'";
+            info.Arguments = "/c echo " + value;
+        }
+        { string value = "unrelated sibling"; }
+    }
 }
