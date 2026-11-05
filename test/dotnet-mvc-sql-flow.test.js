@@ -113,6 +113,45 @@ test('MVC SQL budgets and incomplete input decline only the additive rule',()=>{
 });
 
 const dbWithInitializer = db.replace(' public DbSet', ' public CatalogDb(DbContextOptions<CatalogDb> options) : base(options) {}\n public DbSet');
+// The generic index rejects attributed headers; MVC independently recognizes
+// these request sources. Constructor-owner isolation must not conflate the two.
+for (const attribute of ['', 'FromQuery', 'FromRoute', 'FromForm', 'FromHeader', 'FromServices'])
+ for (const initializer of [false, true]) for (const eol of ['\n', '\r\n'])
+  test(`MVC preserves ${attribute || 'bare'} parameter handling, initializer=${initializer}, ${JSON.stringify(eol)}`, async t => {
+   const annotated = body => controller(action(body).replace('string q', `${attribute ? '[' + attribute + '] ' : ''}string q`)).replaceAll('\n', eol);
+   const data = (initializer ? dbWithInitializer : db).replaceAll('\n', eol);
+   const source = annotated(flow);
+   assert.equal(hits(await findings(t, source, { 'Data.cs': data })).length, attribute === 'FromServices' ? 0 : 1);
+   const safe = flow.replace('$"SELECT * FROM Listings WHERE Name LIKE \'%{q}%\'"', '"SELECT * FROM Listings"');
+   assert.equal(hits(await findings(t, annotated(safe), { 'Data.cs': data })).length, 0);
+   const isolatedController = source.replace('public CatalogController(CatalogDb db)', 'public CatalogController(CatalogDb db) : base()');
+   assert.equal(hits(await findings(t, isolatedController, { 'Data.cs': data })).length, 0);
+  });
+
+test('constructor isolation provenance preserves generic index exclusions and default fallback behavior', () => {
+ const { buildDotnetProjectIndex } = require('../src/dotnet/project-index');
+ for (const eol of ['\n', '\r\n']) {
+  const source = (controller(action(flow).replace('string q', '[FromQuery] string q')) + '\n' + dbWithInitializer).replaceAll('\n', eol);
+  const files = [{ file: 'Combined.cs', source }];
+  const ordinary = buildDotnetProjectIndex(files);
+  assert.deepEqual(ordinary.methods, []);
+  assert.deepEqual(ordinary.types, []);
+  assert.deepEqual(ordinary.diagnostics, { fallbackFiles: 1, truncated: false });
+  const isolated = buildDotnetProjectIndex(files, { isolateConstructorInitializers: true });
+  assert.deepEqual(isolated.diagnostics, { fallbackFiles: 1, truncated: false, isolatedConstructorFiles: 1 });
+  const actionMethod = isolated.methods.find(m => m.name === 'Search');
+  assert.equal(actionMethod.unsupported, true);
+  assert.equal(actionMethod.constructorOwnerIsolated, false);
+  const contextMethods = isolated.methods.filter(m => m.typeId === 'Demo.Data.CatalogDb');
+  assert.ok(contextMethods.length);
+  assert.ok(contextMethods.every(m => m.unsupported && m.constructorOwnerIsolated));
+  const complete = [{ file: 'Controller.cs', source: controller(action(flow).replace('string q', '[FromQuery] string q')) }];
+  const defaultAction = buildDotnetProjectIndex(complete).methods.find(m => m.name === 'Search');
+  assert.equal(defaultAction.unsupported, true);
+  assert.equal(Object.hasOwn(defaultAction, 'constructorOwnerIsolated'), false);
+ }
+});
+
 test('MVC SQL retains real action flows with an unsupported context constructor initializer', async t => {
  for (const eol of ['\n', '\r\n']) {
   assert.equal(hits(await findings(t, controller(action(flow)), { 'Data.cs': dbWithInitializer.replaceAll('\n', eol) })).length, 1);

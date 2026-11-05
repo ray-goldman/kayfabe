@@ -82,7 +82,10 @@ function buildDotnetProjectIndex(files, { isolateConstructorInitializers = false
         ({name:type.name,start:type.start,bodyStart:type.bodyStart,end:type.bodyEnd})));
       if(!isolated)continue;
       isolatedConstructorFiles++;
-      for(const method of parsed.methods) method.unsupported ||= isolated.some(owner=>method.start<owner.end&&method.end>owner.start);
+      for(const method of parsed.methods) {
+        method.constructorOwnerIsolated = isolated.some(owner=>method.start<owner.end&&method.end>owner.start);
+        method.unsupported ||= method.constructorOwnerIsolated;
+      }
     }
     for(const declaration of parsed.types) {
       const typeId=[declaration.namespace,declaration.typeName].filter(Boolean).join('.');
@@ -95,7 +98,7 @@ function buildDotnetProjectIndex(files, { isolateConstructorInitializers = false
       const typeId=[m.namespace,m.typeName].filter(Boolean).join('.');
       if(!types.has(typeId)) types.set(typeId,{id:typeId,namespace:m.namespace,name:m.typeName,declarations:new Map()});
       const signature=m.parameters.map(p=>(p.type||'?').replace(/\s+/g,'')).join(',');
-      methods.push({id:typeId+'.'+m.name+'/'+m.parameters.length+'('+signature+')',file,namespace:m.namespace,typeId,name:m.name,arity:m.parameters.length,parameterTypes:m.parameters.map(p=>p.type),parameters:m.parameters,hasPrimaryConstructor:m.hasPrimaryConstructor,primaryConstructorParameters:m.primaryConstructorParameters,primaryConstructorUnsupported:m.primaryConstructorUnsupported,visibility:m.visibility,static:m.static,unsupported:m.unsupported||m.primaryConstructorUnsupported,start:m.start,end:m.end,startLine:m.startLine,bodyStart:m.bodyStart,bodyEnd:m.bodyEnd,bodyLine:source.slice(0,m.bodyStart+1).split(/\r?\n/).length,body:m.body});
+      methods.push({id:typeId+'.'+m.name+'/'+m.parameters.length+'('+signature+')',file,namespace:m.namespace,typeId,name:m.name,arity:m.parameters.length,parameterTypes:m.parameters.map(p=>p.type),parameters:m.parameters,hasPrimaryConstructor:m.hasPrimaryConstructor,primaryConstructorParameters:m.primaryConstructorParameters,primaryConstructorUnsupported:m.primaryConstructorUnsupported,visibility:m.visibility,static:m.static,unsupported:m.unsupported||m.primaryConstructorUnsupported,...(isolateConstructorInitializers?{constructorOwnerIsolated:!!m.constructorOwnerIsolated}:{}),start:m.start,end:m.end,startLine:m.startLine,bodyStart:m.bodyStart,bodyEnd:m.bodyEnd,bodyLine:source.slice(0,m.bodyStart+1).split(/\r?\n/).length,body:m.body});
     }
   }
   const counts=new Map();

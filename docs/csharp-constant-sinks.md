@@ -69,6 +69,10 @@ unknown errors and malformed syntax still reject this proof.
 MVC SQL detection opts into the same bounded initializer isolation for type
 metadata: a DbContext declaration and its literal auto-property shape can still
 be inspected while all methods in the unsupported owner remain ineligible.
+The opt-in method metadata distinguishes constructor-owner isolation from the
+general unsupported-syntax flag. MVC excludes isolated owners, then applies its
+existing action grammar, including FromQuery, FromRoute, FromForm and FromHeader
+parameters; general index consumers still reject those attributed headers.
 Other project-index consumers retain their existing behavior. Parser completeness
 and fallback-file counts remain unchanged; the opt-in index separately reports
 isolated constructor files. The shared validator caps source at 100,000 characters,

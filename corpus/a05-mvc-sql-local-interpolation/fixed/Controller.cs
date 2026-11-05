@@ -6,7 +6,7 @@ namespace Demo.Web {
         private readonly CatalogDb _db;
         public CatalogController(CatalogDb db) { _db = db; }
         [HttpGet]
-        public IActionResult Search(string q) {
+        public IActionResult Search([FromQuery] string q) {
             if (!HasSession()) return RedirectToAction("Index");
             var rows = _db.Listings.FromSql($"SELECT * FROM Listings WHERE Name = {q}").ToList();
             return View(rows);

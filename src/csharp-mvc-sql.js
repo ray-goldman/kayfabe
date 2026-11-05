@@ -209,7 +209,9 @@ function mvcSqlFindings({files, complete = true}) {
   const out=[];
   for(const file of candidates){
     const data=models.get(file.rel);
-    for(const method of index.methods.filter(m=>m.file===file.rel&&!m.ambiguous&&!m.unsupported)){
+    // MVC validates its own action grammar (including request attributes).
+    // Only constructor-isolated owners are excluded by this provenance gate.
+    for(const method of index.methods.filter(m=>m.file===file.rel&&!m.ambiguous&&!m.constructorOwnerIsolated)){
       const owner=types.get(method.typeId);if(!owner||owner.partial||owner.ambiguous||owner.name.includes('.')||!owner.bases.some(b=>['Controller','ControllerBase'].includes(b)))continue;
       const declaration=data.ts.findIndex(t=>t.start===owner.declarations[0].start),header=knownMetadata(prefix(data.ts,declaration),data,true);
       if(!header||!['public','publicsealed'].includes(joined(header))||data.ts[declaration+2]?.text==='<')continue;
