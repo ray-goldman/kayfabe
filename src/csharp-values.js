@@ -31,19 +31,29 @@ function split(tokens, separator) {
 // An invalid label (such as a missing name) must not fall through to the
 // positional path, where an unused actual is not necessarily expanded.
 function argumentLabel(tokens) {
-  let depth = 0, pending = 0, label = false;
-  for (const token of tokens) {
+  let depth = 0, required = 0, possible = 0, label = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
     if (['(', '[', '{'].includes(token.text)) depth++;
     else if ([')', ']', '}'].includes(token.text)) depth--;
-    else if (!depth && token.text === '?') pending++;
+    else if (!depth && token.text === '?') {
+      // ? [ can be null-conditional indexing or a ternary collection arm.
+      // Track the interval of possible pending counts, without binding types or
+      // selecting a value. Ordinary ternaries are mandatory in every reading.
+      if (tokens[i + 1]?.text !== '[') required++;
+      possible++;
+    }
     else if (!depth && token.text === ':') {
-      if (pending) pending--;
+      if (possible) {
+        possible--;
+        required = Math.max(0, required - 1);
+      }
       else label = true;
     }
   }
   // A matched ternary colon is not a label. Keep examining the rest of the
   // actual: an extra colon or unmatched question must not enter positional proof.
-  return label || pending > 0;
+  return label || required > 0;
 }
 
 // This proof deliberately accepts a small subset. All syntactic writes count,

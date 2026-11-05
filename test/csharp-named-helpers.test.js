@@ -191,6 +191,46 @@ for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
         assert.equal(prove(fixture(body).replace(/\n/g, eol), rule), true, actual);
       }
     });
+
+    test(`positional ${form} preserves conditional element access and composition (${ending})`, () => {
+      for (const actual of [
+        'values?[0]', '(values?[0])', 'values ? [0]',
+        'values?[0] ?? "ignored"', '(values?[0] ?? "ignored")',
+        'flag ? values?[0] : "ignored"', 'flag ? "ignored" : values?[0]',
+        'flag ? values?[0] : values?[1]',
+        'values?[0] ?? (flag ? "a" : "b")',
+        'flag ? (values?[0] ?? "a") : "b"',
+      ]) {
+        const code = fixture(sink(`Pick(${actual}, "fixed")`) + ' // sink')
+          .replace('Run(string input, bool flag)', 'Run(bool flag, string[] values)').replace(/\n/g, eol);
+        assert.equal(prove(code, rule), true, actual);
+      }
+      for (const actual of ['values?[0] ? "a"', 'flag ? values?[0]', 'values?[0] ?? "a": "ignored": "extra"']) {
+        const code = fixture(sink(`Pick(${actual}, "fixed")`) + ' // sink')
+          .replace('Run(string input, bool flag)', 'Run(bool flag, string[] values)').replace(/\n/g, eol);
+        assert.equal(prove(code, rule), false, actual);
+      }
+      const named = fixture(sink('Pick(unused: values?[0], selected: "fixed")') + ' // sink')
+        .replace('Run(string input, bool flag)', 'Run(bool flag, string[] values)').replace(/\n/g, eol);
+      assert.equal(prove(named, rule), false);
+    });
+
+    test(`positional ${form} preserves existing collection-expression conditional classification (${ending})`, () => {
+      // The legacy path can ignore an unused external collection formal. A ? [
+      // token sequence is also possible in a target-typed collection ternary;
+      // do not turn this compatibility check into new type or purity inference.
+      const member = helper.replace('string unused', 'ExternalCollection unused');
+      for (const actual of [
+        'flag ? ["a"] : ["b"]',
+        'flag ? (flag ? ["a"] : ["b"]) : ["c"]',
+        'flag ? ["a"] : flag ? ["b"] : ["c"]',
+        'flag ? [..values] : []',
+      ]) {
+        const code = fixture(sink(`Pick(${actual}, "fixed")`) + ' // sink', member)
+          .replace('Run(string input, bool flag)', 'Run(bool flag, string[] values)').replace(/\n/g, eol);
+        assert.equal(prove(code, rule), true, actual);
+      }
+    });
   }
 
   test(`inherited field and property receivers retain scanner candidates (${ending})`, async t => {

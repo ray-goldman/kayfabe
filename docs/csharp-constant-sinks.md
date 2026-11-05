@@ -78,6 +78,12 @@ never establishes safety of that helper's input at every caller.
 The argument classifier scans the complete top-level conditional structure:
 matched ternary colons preserve positional compatibility, while extra label
 colons and unmatched questions decline proof before positional fallback.
+Conditional element access (`values?[0]`) does not require a ternary colon.
+Because `? [` can also begin a collection-expression ternary arm, the bounded
+classifier preserves either balanced structural reading using possible/required
+pending counts. This preserves existing positional compatibility without
+establishing a type, value or purity proof for the unused actual. Named actuals
+remain literal-only, and arbitrary malformed nested syntax is not validated.
 
 Each value-proof query has one shared 65,536-unit expansion budget, charged for
 expression tokens, binding visits, named caller/body traversal, call-site scans,
