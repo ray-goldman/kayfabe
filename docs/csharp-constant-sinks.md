@@ -58,3 +58,19 @@ ownership, and unsupported expressions retain candidates. The two-megabyte file,
 Interpolated strings and broader type/helper inference remain outside this
 extension. Regex candidate coverage is unchanged; these are bounded syntactic
 proofs rather than complete C# analysis.
+
+The separate source-const-member interpolation proof can isolate a known explicit
+constructor-initializer diagnostic after independently checking its exact type
+bounds and constructor tokens. The affected type and overlapping types cannot
+supply constants or sink ownership. Every token and type remains in the global
+shadow, duplicate, import and build-input checks. Primary executable headers,
+unknown errors and malformed syntax still reject this proof.
+
+MVC SQL detection opts into the same bounded initializer isolation for type
+metadata: a DbContext declaration and its literal auto-property shape can still
+be inspected while all methods in the unsupported owner remain ineligible.
+Other project-index consumers retain their existing behavior. Parser completeness
+and fallback-file counts remain unchanged; the opt-in index separately reports
+isolated constructor files. The shared validator caps source at 100,000 characters,
+tokens at 20,000 and diagnostics at 512. It does not parse or evaluate initializer
+expressions or claim executable-header coverage.

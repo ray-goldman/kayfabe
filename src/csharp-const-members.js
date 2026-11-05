@@ -4,6 +4,7 @@
 const path = require('node:path').posix;
 const { parseCSharp } = require('./parsers/csharp/parser');
 const { tokenFile, name, text } = require('./csharp-proof-index');
+const { isolatedConstructorOwners } = require('./csharp-constructor-isolation');
 // Reserved tokens are not type identifiers without @. In particular, `this`
 // denotes an instance even if an unrelated source type is named @this.
 const RESERVED = new Set(('abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while').split(' '));
@@ -47,7 +48,12 @@ function createCSharpConstMemberProof(sources, { complete = true, projects = [],
   if (!complete || !projectComplete || inputs.length > 1000 || inputs.reduce((n,s)=>n+Buffer.byteLength(s.raw),0) > 8*1024*1024 || !projectScope(projects, inputs)) return decline;
   const files = [], types = [], declarations = new Set();
   for (const source of inputs) {
-    if (source.raw.length > 100000 || !parseCSharp(source.raw).complete) return decline;
+    if (source.raw.length > 100000) return decline;
+    const parsed = parseCSharp(source.raw);
+    // This proof inventories tokens independently of executable method parsing.
+    // Only a precisely bounded explicit initializer may be isolated; its owner
+    // cannot supply a proof, and all its tokens/types still participate in the
+    // project-wide duplicate, import and value-shadow checks below.
     const lex = tokenFile(source.raw); if (!lex) return decline;
     const { ts, pairs } = lex;
     if (ts.some((t,i) => t.text === 'extern' || t.text === 'global' && ts[i+1]?.text === 'using')) return decline;
@@ -89,6 +95,10 @@ function createCSharpConstMemberProof(sources, { complete = true, projects = [],
         if(rhs.length && rhs.length<=64 && rhs.every((t,k)=>k%2?t.text==='+':t.kind==='string'&&!t.text.endsWith('u8')) && rhs.length%2) type.members.add(name(part[at+2]));
       }
     }
+    const isolated = isolatedConstructorOwners(parsed, source.raw, file.types.map(type =>
+      ({ name: type.name, start: ts[type.start].start, bodyStart: ts[type.open].start, end: ts[type.close].end })));
+    if (!isolated) return decline;
+    for (const type of file.types) type.unsupported ||= isolated.some(owner => ts[type.start].start < owner.end && ts[type.close].end > owner.start);
   }
   const namespaces=new Set(types.map(t=>t.namespace));
   // External imports/build extensions cannot supply a competing source binding.

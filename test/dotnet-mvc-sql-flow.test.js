@@ -111,3 +111,49 @@ test('MVC SQL budgets and incomplete input decline only the additive rule',()=>{
   assert.deepEqual(mvcSqlFindings({files:[{...files[0],code},files[1]]}),[]);
  assert.deepEqual(mvcSqlFindings({files:[...files,...Array.from({length:999},(_,i)=>({rel:`Extra${i}.cs`,lang:'csharp',code:'class Extra {}'}))]}),[]);
 });
+
+const dbWithInitializer = db.replace(' public DbSet', ' public CatalogDb(DbContextOptions<CatalogDb> options) : base(options) {}\n public DbSet');
+test('MVC SQL retains real action flows with an unsupported context constructor initializer', async t => {
+ for (const eol of ['\n', '\r\n']) {
+  assert.equal(hits(await findings(t, controller(action(flow)), { 'Data.cs': dbWithInitializer.replaceAll('\n', eol) })).length, 1);
+  const sameFile = controller(action(flow)) + '\n' + dbWithInitializer;
+  assert.equal(hits(await findings(t, sameFile, { 'Data.cs': '' })).length, 1);
+  const safe = flow.replace('$"SELECT * FROM Listings WHERE Name LIKE \'%{q}%\'"', '"SELECT * FROM Listings"');
+  assert.equal(hits(await findings(t, controller(action(safe)), { 'Data.cs': dbWithInitializer })).length, 0);
+ }
+});
+
+test('MVC initializer isolation keeps owners, types, aliases and unknown diagnostics conservative', async t => {
+ const cases = [
+  [controller(action(flow)).replace('public CatalogController(CatalogDb db)', 'public CatalogController(CatalogDb db) : base()'), dbWithInitializer, ''],
+  [controller(action(flow)), dbWithInitializer.replace('class CatalogDb :', 'class CatalogDb(string input) :'), ''],
+  [controller(action(flow)), dbWithInitializer, 'namespace Demo.Data { class CatalogDb {} }'],
+  [controller(action(flow)), dbWithInitializer, 'class Other : Base { public Other() : base() {} class DbContext {} }'],
+  [controller(action(flow)), dbWithInitializer, 'using DbContext = CustomDb;'],
+  [controller(action(flow)), dbWithInitializer.replace('{}', '{ goto done; done: return; }'), ''],
+  [controller(action(flow)), dbWithInitializer + ' class Unclosed {', ''],
+  [controller(action(flow)), dbWithInitializer + ' "unterminated', ''],
+  [controller(action(flow)), dbWithInitializer.replace('public DbSet', 'private DbSet'), ''],
+  [controller(action(flow)), dbWithInitializer.replace('get; set;', 'get { return SafeQuery; }'), ''],
+ ];
+ for (const [source, data, other] of cases)
+  assert.equal(hits(await findings(t, source, { 'Data.cs': data, 'Other.cs': other })).length, 0, data + other);
+});
+
+test('opt-in initializer type indexing keeps truthful fallback coverage and unsupported methods', () => {
+ const { buildDotnetProjectIndex } = require('../src/dotnet/project-index');
+ const { parseCSharp } = require('../src/parsers/csharp/parser');
+ const files = [{ file: 'Data.cs', source: dbWithInitializer }];
+ const parsed = parseCSharp(dbWithInitializer);
+ assert.equal(parsed.complete, false);
+ assert.equal(parsed.coverage.parsedMethods, 0);
+ const ordinary = buildDotnetProjectIndex(files);
+ assert.equal(ordinary.types.length, 0);
+ assert.equal(ordinary.diagnostics.fallbackFiles, 1);
+ const isolated = buildDotnetProjectIndex(files, { isolateConstructorInitializers: true });
+ assert.equal(isolated.diagnostics.fallbackFiles, 1);
+ assert.equal(isolated.diagnostics.isolatedConstructorFiles, 1);
+ assert.ok(isolated.types.some(type => type.name === 'CatalogDb'));
+ assert.ok(isolated.methods.length);
+ assert.ok(isolated.methods.every(method => method.unsupported));
+});

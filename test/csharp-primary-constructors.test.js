@@ -9,6 +9,26 @@ const { createCSharpConstantSinkProof } = require('../src/csharp-constant-sinks'
 const { scan } = require('../src/engine');
 const { tokenizeCSharp } = require('../src/parsers/csharp/lexer');
 const { parenthesizedMutationTokens } = require('../src/csharp-mutations');
+const { isolatedConstructorOwners } = require('../src/csharp-constructor-isolation');
+
+test('explicit initializer diagnostic isolation has exact bounds and fixed source/token/error ceilings', () => {
+  const source = 'class Other : Base { public Other(string input) : base(input) {} }';
+  const parsed = parseCSharp(source);
+  const owners = [{ name: 'Other', start: 0, bodyStart: source.indexOf('{'), end: source.length }];
+  assert.deepEqual(isolatedConstructorOwners(parsed, source, owners), [{ start: 0, end: source.length }]);
+  for (const [ast, raw, types] of [
+    [parsed, source, [{ ...owners[0], name: 'Wrong' }]],
+    [parsed, source, [{ ...owners[0], end: source.length - 1 }]],
+    [parsed, source, [...owners, ...owners]],
+    [parsed, source + ' '.repeat(100001), owners],
+    [parsed, source + ';'.repeat(20001), owners],
+    [{ ...parsed, errors: Array(513).fill(parsed.errors[0]) }, source, owners],
+    [{ ...parsed, errors: [...parsed.errors, { message: 'future diagnostic' }] }, source, owners],
+    [{ ...parsed, errors: [{ ...parsed.errors[0], start: source.indexOf('Base') }] }, source, owners],
+  ]) assert.equal(isolatedConstructorOwners(ast, raw, types), null);
+  assert.equal(parsed.complete, false);
+  assert.equal(parsed.coverage.parsedMethods, 0);
+});
 
 function prove(source, rule = 'CS-SQLI-001', eol = '\n') {
   const code = source.replace(/\n/g, eol);
