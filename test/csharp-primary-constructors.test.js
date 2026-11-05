@@ -7,11 +7,21 @@ const path = require('node:path');
 const { parseCSharp } = require('../src/parsers/csharp/parser');
 const { createCSharpConstantSinkProof } = require('../src/csharp-constant-sinks');
 const { scan } = require('../src/engine');
+const { tokenizeCSharp } = require('../src/parsers/csharp/lexer');
+const { parenthesizedMutationTokens } = require('../src/csharp-mutations');
 
 function prove(source, rule = 'CS-SQLI-001', eol = '\n') {
   const code = source.replace(/\n/g, eol);
   return createCSharpConstantSinkProof(code)(code.split('\n').findIndex(line => line.includes('// sink')), rule);
 }
+
+test('wrapped mutation recognition fails closed for malformed and over-budget operands', () => {
+  for (const source of ['(value', 'value)', '('.repeat(1000) + 'value' + ') += input'.repeat(1000), ';'.repeat(20001)]) {
+    assert.equal(parenthesizedMutationTokens(tokenizeCSharp(source).tokens), null);
+  }
+  const tokens = tokenizeCSharp('((value)) += input; ref (((other)));').tokens;
+  assert.deepEqual(parenthesizedMutationTokens(tokens).map(token => token.text), ['value', 'other']);
+});
 
 // Counting the type header as an executable method must fail these assertions.
 for (const kind of ['class', 'struct', 'record', 'record class', 'record struct']) {
@@ -55,6 +65,36 @@ for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
 
 const primaryShapes = ['class Sample(string input)', 'struct Sample(string input)', 'record Sample(string input)',
   'record class Sample(string input)', 'record struct Sample(string input)', 'class Sample()'];
+const wrappedMutations = [
+  ['string value = null; (value) ??= input;', false],
+  ['string value = null; ((value)) ??= input;', false],
+  ['string value = "fixed"; (value) += input;', false],
+  ['string value = "fixed"; ((value)) += input;', false],
+  ['string value = "fixed"; (value) = input;', false],
+  ['string value = "fixed"; ref string alias = ref value; alias = input;', false],
+  ['string value = "fixed"; ref string alias = ref (value); alias = input;', false],
+  ['string value = "fixed"; ref string alias = ref (((value))); alias = input;', false],
+  ['string value = "fixed"; string other = null; ((other)) ??= input;', true],
+  ['string value = "fixed"; string other = ""; ((other)) += input;', true],
+  ['string value = "fixed";', true],
+];
+
+for (const header of primaryShapes) for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+  for (const [rule, sink] of [
+    ['CS-SQLI-001', 'command.CommandText = "SELECT " + VALUE;'],
+    ['CS-CMDI-001', 'info.Arguments = "/c " + VALUE;'],
+    ['CS-CMDI-001', 'Process.Start("cmd.exe", "/c " + VALUE);'],
+  ]) {
+    test(`${header} tracks wrapped mutation/ref operands for ${sink.split(' =')[0]} (${ending})`, () => {
+      for (const [body, expected] of wrappedMutations) for (const multiline of [false, true]) {
+        const code = `${header} {\n void Run(string input) {\n ${body}\n ${sink.replace('VALUE', multiline ? '// sink\n value' : 'value')} ${multiline ? '' : '// sink'}\n }\n}`;
+        assert.equal(prove(code, rule, eol), expected, body);
+      }
+      const helper = `${header} {\n private string value;\n void Set(string input) { value = "fixed"; ((this.value)) += input; }\n private string Value() { return value; }\n void Run() {\n ${sink.replace('VALUE', 'Value()')} // sink\n }\n}`;
+      assert.equal(prove(helper, rule, eol), false);
+    });
+  }
+}
 const queries = {
   from: 'from value in inputs',
   typedFrom: 'from string value in inputs',

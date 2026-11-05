@@ -3,6 +3,7 @@
 const { parseCSharp } = require('./parsers/csharp/parser');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { createCSharpValueProof } = require('./csharp-values');
+const { parenthesizedMutationTokens } = require('./csharp-mutations');
 
 const CONSTANT_TYPES = new Set(['string', 'String', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal', 'var']);
 const MAX_METHOD = 50000;
@@ -197,6 +198,8 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   const lexed = tokenizeCSharp(code.slice(method.start, method.end));
   if (lexed.errors.length || lexed.tokens.some(token => token.kind === 'interpolated-string')) return false;
   const tokens = lexed.tokens;
+  const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(tokens) : [];
+  if (!wrappedWrites) return false;
   const methodParams = new Set([...(method.parameters || []), ...(method.primaryConstructorParameters || [])].map(parameter => parameter.name));
   const declarations = parseLocalDeclarations(tokens, method.hasPrimaryConstructor);
   const assignments = new Map();
@@ -238,6 +241,7 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
       if (token.kind === 'identifier') pending.push(token.text.replace(/^@/, ''));
     }
   }
+  if (wrappedWrites.some(token => relevant.has(token.text.replace(/^@/, '')))) return false;
   for (let i = 0; i < tokens.length; i++) {
     const name = tokens[i].kind === 'identifier' ? tokens[i].text.replace(/^@/, '') : null;
     if (!name || !relevant.has(name)) continue;

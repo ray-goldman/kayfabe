@@ -2,6 +2,7 @@
 
 const { buildDotnetProjectIndex } = require('./dotnet/project-index');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
+const { parenthesizedMutationTokens } = require('./csharp-mutations');
 const SCALARS = new Set(['string', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal']);
 const id = token => token?.text.replace(/^@/, '');
 
@@ -76,7 +77,8 @@ function createCSharpValueProof(code, ast) {
       if(fields.has(name))shadowedFields.add(name);
     }
     for(const name of shadowedFields)fields.get(name).invalid=true;
-    const invalid = method.primaryConstructorUnsupported || method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
+    const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(ts) : [];
+    const invalid = !wrappedWrites || method.primaryConstructorUnsupported || method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
       ['=>', 'ref', 'out', 'foreach', 'fixed', 'unsafe', 'goto', 'is', 'switch'].includes(t.text) ||
       t.text === '(' && pairs.has(positions.get(t.start)) && tokens[pairs.get(positions.get(t.start)) + 1]?.text === '{' &&
       !['if','while','for','switch','catch','using','lock'].includes(ts[i - 1]?.text));
@@ -106,6 +108,10 @@ function createCSharpValueProof(code, ast) {
     }
     const model = { method, ts, invalid, bindingAt, returns: [] };
     models.set(method.id, model);
+    for (const token of wrappedWrites || []) {
+      const binding = bindingAt(token);
+      if (binding) binding.invalid = true;
+    }
     for (const token of ts) {
       const open = positions.get(token.start), close = pairs.get(open);
       if (token.text !== '(' || tokens[close + 1]?.text !== '=') continue;

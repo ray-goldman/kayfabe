@@ -25,7 +25,16 @@ class Primary(string input)
     void Coalesce(SqlCommand command, ProcessStartInfo info)
     {
         string value = null;
-        value ??= input;
+        ((value)) ??= input;
+        command.CommandText = "SELECT Name FROM Items WHERE Name = '" + value + "'";
+        info.Arguments = "/c echo " + value;
+    }
+
+    void Alias(SqlCommand command, ProcessStartInfo info)
+    {
+        string value = "fixed";
+        ref string alias = ref (value);
+        alias = input;
         command.CommandText = "SELECT Name FROM Items WHERE Name = '" + value + "'";
         info.Arguments = "/c echo " + value;
     }

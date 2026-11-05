@@ -35,6 +35,11 @@ proof path; range-variable values are unresolved even for literal enumerables.
 Exact tokens distinguish genuine query syntax from standalone `from`/`@from`
 identifiers and string/comment text. Relevant null-coalescing and split compound
 assignments invalidate primary-member values; unrelated mutations do not.
+Balanced parenthesized write targets and ref operands also invalidate their
+relevant bindings before proof acceptance, including field/helper fallback.
+This identifies unsupported writes rather than inferring alias values. The
+shared recognizer uses the existing 20,000-token ceiling and a fixed linear
+work budget; malformed or over-budget operands decline proof.
 The ordinary non-primary legacy query/compound-write weaknesses predate this
 ownership change and remain separate backlog work.
 
