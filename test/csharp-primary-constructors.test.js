@@ -53,6 +53,54 @@ for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
   });
 }
 
+const primaryShapes = ['class Sample(string input)', 'struct Sample(string input)', 'record Sample(string input)',
+  'record class Sample(string input)', 'record struct Sample(string input)', 'class Sample()'];
+const queries = {
+  from: 'from value in inputs',
+  typedFrom: 'from string value in inputs',
+  escapedFrom: 'from @value in inputs',
+  join: 'from item in inputs join value in inputs on item equals value',
+  into: 'from item in inputs select item into value',
+  let: 'from item in inputs let value = item',
+};
+
+for (const header of primaryShapes) {
+  for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+    test(`${header} rejects relevant null-coalescing writes but preserves unrelated writes (${ending})`, () => {
+      for (const [rule, lhs] of [['CS-SQLI-001', 'command.CommandText'], ['CS-CMDI-001', 'info.Arguments']]) {
+        for (const multiline of [false, true]) {
+          const source = `${header} {\n void Run(string input) {\n BODY\n ${lhs} = "prefix " + ${multiline ? '// sink\n value;' : 'value; // sink'}\n }\n}`;
+          assert.equal(prove(source.replace('BODY', 'string value = null; value ??= input;'), rule, eol), false);
+          assert.equal(prove(source.replace('BODY', 'string value = null; value ??= Unknown();'), rule, eol), false);
+          assert.equal(prove(source.replace('BODY', 'string value = "fixed"; string other = null; other ??= input;'), rule, eol), true);
+          assert.equal(prove(source.replace('BODY', 'string value = "fixed";'), rule, eol), true);
+          for (const operator of ['%=', '&=', '|=', '^=', '<<=', '>>=']) {
+            const numeric = source.replace('Run(string input)', 'Run(int input)').replace('BODY', `int value = 1; value ${operator} input;`);
+            assert.equal(prove(numeric, rule, eol), false, operator);
+            const unrelated = source.replace('Run(string input)', 'Run(int input)').replace('BODY', `int value = 1; int other = 1; other ${operator} input;`);
+            assert.equal(prove(unrelated, rule, eol), true, operator);
+          }
+        }
+      }
+    });
+    test(`${header} does not borrow locals or fields for query range bindings (${ending})`, () => {
+      for (const query of Object.values(queries)) for (const multiline of [false, true]) {
+        for (const literalSource of [false, true]) {
+          const source = `${header} {\n void Run(string[] inputs) {\n { string value = "fixed"; }\n { var query = ${literalSource ? query.replaceAll('inputs', 'new[] { "fixed" }') : query}\n select new SqlCommand("SELECT " + ${multiline ? '// sink\n value);' : 'value); // sink'}\n query.ToList(); }\n }\n}`;
+          assert.equal(prove(source, 'CS-SQLI-001', eol), false, query);
+        }
+      }
+      const field = `${header} {\n private string value;\n void Set() { value = "fixed"; }\n void Run(string[] inputs) { var query = from value in inputs\n select new SqlCommand("SELECT " + value); // sink\n }\n}`;
+      assert.equal(prove(field, 'CS-SQLI-001', eol), false);
+      const helper = `${header} {\n private string Value() { return "fixed"; }\n void Run(System.Func<string>[] inputs) { var query = from Value in inputs\n select new SqlCommand("SELECT " + Value()); // sink\n }\n}`;
+      assert.equal(prove(helper, 'CS-SQLI-001', eol), false);
+      for (const declaration of ['string from = "fixed";', 'string @from = "fixed";', 'string from = "from value in inputs"; /* from value in inputs */']) {
+        assert.equal(prove(`${header} {\n void Run() { ${declaration}\n command.CommandText = "SELECT " + from; // sink\n }\n}`, 'CS-SQLI-001', eol), true, declaration);
+      }
+    });
+  }
+}
+
 test('a primary parameter in a separate type does not contaminate a local proof', () => {
   assert.equal(prove('class Other(string value) {}\nclass Sample {\n void Run() { string value = "fixed";\n command.CommandText = "SELECT " + // sink\n value;\n }\n}'), true);
 });

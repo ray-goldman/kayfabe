@@ -30,6 +30,13 @@ Newly eligible primary-owner methods also apply unsupported-binding guards to
 single-line sinks. Their legacy local proof requires exact keyword scalar types;
 unresolved `var`, `String`, aliases and other named types cannot inherit a
 same-named sibling literal. Empty primary parameter lists use the same boundary.
+Primary-member proofs decline bounded query starts (`from ... in`) before either
+proof path; range-variable values are unresolved even for literal enumerables.
+Exact tokens distinguish genuine query syntax from standalone `from`/`@from`
+identifiers and string/comment text. Relevant null-coalescing and split compound
+assignments invalidate primary-member values; unrelated mutations do not.
+The ordinary non-primary legacy query/compound-write weaknesses predate this
+ownership change and remain separate backlog work.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

@@ -17,6 +17,22 @@ function methodComplete(parsed, method) {
     (method.end <= error.ownerStart || method.start >= error.ownerEnd));
 }
 
+// Query range variables need their own binding scopes. Decline the bounded
+// query-start shape before either proof path can borrow a local/field/helper.
+// Exact token spelling keeps escaped identifiers, comments and strings inert.
+function hasQueryBindings(tokens, method) {
+  const typePunctuation = new Set(['.', '::', '<', '>', '>>', '[', ']', '?', ',', '(', ')']);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].start <= method.bodyStart || tokens[i].end >= method.bodyEnd || tokens[i].text !== 'from') continue;
+    for (let j = i + 1; j < tokens.length && tokens[j].end < method.bodyEnd; j++) {
+      if (tokens[j].text === 'in' && tokens[j - 1].kind === 'identifier') return true;
+      if (tokens[j].kind !== 'identifier' && !typePunctuation.has(tokens[j].text)) break;
+      if (j - i >= 256) return true;
+    }
+  }
+  return false;
+}
+
 function splitAtTopLevel(tokens, delimiter) {
   const parts = []; let start = 0, depth = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -226,7 +242,8 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
     const name = tokens[i].kind === 'identifier' ? tokens[i].text.replace(/^@/, '') : null;
     if (!name || !relevant.has(name)) continue;
     if (['++', '--', '+=', '-=', '*=', '/=', '%='].includes(tokens[i + 1]?.text) || ['++', '--'].includes(tokens[i - 1]?.text) ||
-        ['ref', 'out'].includes(tokens[i - 1]?.text)) return false;
+        ['ref', 'out'].includes(tokens[i - 1]?.text) || method.hasPrimaryConstructor &&
+        (tokens[i + 1]?.text === '??=' || ['%', '&', '|', '^', '<<', '>>'].includes(tokens[i + 1]?.text) && tokens[i + 2]?.text === '=')) return false;
     if (tokens[i + 1]?.text === '=>' && tokens.slice(i + 2).some(token => token.kind === 'identifier' && relevant.has(token.text.replace(/^@/, '')))) return false;
   }
   const opens=[];
@@ -255,6 +272,10 @@ function createCSharpConstantSinkProof(code) {
     const method = methods[0];
     if (!methodComplete(parsed, method)) return false;
     if (method.primaryConstructorUnsupported) return false;
+    if (method.hasPrimaryConstructor) {
+      tokens ||= tokenizeCSharp(code).tokens;
+      if (hasQueryBindings(tokens, method)) return false;
+    }
     // Both proof paths need the same unique ownership gate. Whole-line
     // containment alone can miss a local function starting on that line.
     if (directConstantSink({ code, line, ruleId, parsed })) return true;

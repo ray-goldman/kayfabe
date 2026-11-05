@@ -120,6 +120,7 @@ function createCSharpValueProof(code, ast) {
       const binding = bindingAt(token);
       if (binding && (['++','--','+=','-=','*=','/=','%=','??='].includes(ts[i + 1]?.text) ||
           ['++','--','ref','out'].includes(ts[i - 1]?.text) ||
+          method.hasPrimaryConstructor && ['<<','>>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=' ||
           ['&','|','^','%','<','>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=')) binding.invalid = true;
       if (binding && ts[i + 1]?.text === '=') {
         if (binding.parameter !== undefined) binding.invalid = true;
