@@ -1,6 +1,7 @@
 'use strict';
 const { parseCSharp } = require('../parsers/csharp/parser');
 const { tokenizeCSharp } = require('../parsers/csharp/lexer');
+const { isolatedConstructorOwners } = require('../csharp-constructor-isolation');
 
 function findOwners(source,ast,tokens) {
   const pairs=new Map(),stack=[];
@@ -64,16 +65,28 @@ function findOwners(source,ast,tokens) {
   return {methods:parsedMethods,types:typeRecords};
 }
 
-function buildDotnetProjectIndex(files) {
-  const methods=[],types=new Map();let bytes=0,fallbackFiles=0,truncated=false;
+function buildDotnetProjectIndex(files, { isolateConstructorInitializers = false } = {}) {
+  const methods=[],types=new Map();let bytes=0,fallbackFiles=0,isolatedConstructorFiles=0,truncated=false;
   for(const entry of files) {
     const file=entry.file||entry.rel,source=entry.source??entry.raw??entry.code;
     if(!file||typeof source!=='string'||!/\.cs$/i.test(file)) continue;
     bytes+=Buffer.byteLength(source);
     if(bytes>100*1024*1024||source.length>2*1024*1024||methods.length>=50000) {fallbackFiles++;truncated=true;continue;}
-    const ast=entry.ast||parseCSharp(source);if(!ast.complete) {fallbackFiles++;continue;}
+    const ast=entry.ast||parseCSharp(source);
+    if(!ast.complete) {fallbackFiles++;if(!isolateConstructorInitializers || source.length>100000)continue;}
     const tokens=tokenizeCSharp(source).tokens;
+    if(!ast.complete && tokens.length>20000)continue;
     const parsed=findOwners(source,ast,tokens);
+    if(!ast.complete) {
+      const isolated=isolatedConstructorOwners(ast,source,parsed.types.map(type=>
+        ({name:type.name,start:type.start,bodyStart:type.bodyStart,end:type.bodyEnd})));
+      if(!isolated)continue;
+      isolatedConstructorFiles++;
+      for(const method of parsed.methods) {
+        method.constructorOwnerIsolated = isolated.some(owner=>method.start<owner.end&&method.end>owner.start);
+        method.unsupported ||= method.constructorOwnerIsolated;
+      }
+    }
     for(const declaration of parsed.types) {
       const typeId=[declaration.namespace,declaration.typeName].filter(Boolean).join('.');
       if(!types.has(typeId)) types.set(typeId,{id:typeId,kind:declaration.kind,bases:declaration.bases,namespace:declaration.namespace,name:declaration.typeName,declarations:new Map()});
@@ -85,7 +98,7 @@ function buildDotnetProjectIndex(files) {
       const typeId=[m.namespace,m.typeName].filter(Boolean).join('.');
       if(!types.has(typeId)) types.set(typeId,{id:typeId,namespace:m.namespace,name:m.typeName,declarations:new Map()});
       const signature=m.parameters.map(p=>(p.type||'?').replace(/\s+/g,'')).join(',');
-      methods.push({id:typeId+'.'+m.name+'/'+m.parameters.length+'('+signature+')',file,namespace:m.namespace,typeId,name:m.name,arity:m.parameters.length,parameterTypes:m.parameters.map(p=>p.type),parameters:m.parameters,visibility:m.visibility,static:m.static,unsupported:m.unsupported,start:m.start,end:m.end,startLine:m.startLine,bodyStart:m.bodyStart,bodyEnd:m.bodyEnd,bodyLine:source.slice(0,m.bodyStart+1).split(/\r?\n/).length,body:m.body});
+      methods.push({id:typeId+'.'+m.name+'/'+m.parameters.length+'('+signature+')',file,namespace:m.namespace,typeId,name:m.name,arity:m.parameters.length,parameterTypes:m.parameters.map(p=>p.type),parameters:m.parameters,hasPrimaryConstructor:m.hasPrimaryConstructor,primaryConstructorParameters:m.primaryConstructorParameters,primaryConstructorUnsupported:m.primaryConstructorUnsupported,visibility:m.visibility,static:m.static,unsupported:m.unsupported||m.primaryConstructorUnsupported,...(isolateConstructorInitializers?{constructorOwnerIsolated:!!m.constructorOwnerIsolated}:{}),start:m.start,end:m.end,startLine:m.startLine,bodyStart:m.bodyStart,bodyEnd:m.bodyEnd,bodyLine:source.slice(0,m.bodyStart+1).split(/\r?\n/).length,body:m.body});
     }
   }
   const counts=new Map();
@@ -170,6 +183,6 @@ function buildDotnetProjectIndex(files) {
     if(implementations?.length===1&&types.has(implementations[0])) field.resolvedType=implementations[0];
     else if(iface) field.ambiguousRegistration=(implementations?.length||0)>1;
   }
-  return {schemaVersion:1,types:[...types.values()].sort((a,b)=>a.id.localeCompare(b.id)),methods:methods.sort((a,b)=>a.id.localeCompare(b.id)||a.file.localeCompare(b.file)),methodLookup,registrations:resolvedRegistrations,diagnostics:{fallbackFiles,truncated}};
+  return {schemaVersion:1,types:[...types.values()].sort((a,b)=>a.id.localeCompare(b.id)),methods:methods.sort((a,b)=>a.id.localeCompare(b.id)||a.file.localeCompare(b.file)),methodLookup,registrations:resolvedRegistrations,diagnostics:{fallbackFiles,truncated,...(isolateConstructorInitializers?{isolatedConstructorFiles}:{})}};
 }
 module.exports={buildDotnetProjectIndex};

@@ -2,6 +2,8 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const { scan } = require('../src/engine');
+const { createCSharpConstMemberProof } = require('../src/csharp-const-members');
+const { parseCSharp } = require('../src/parsers/csharp/parser');
 const project = '<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>';
 const constants = 'namespace Example.Data; public sealed class QueryText { public const string Columns = "id, name"; }';
 const consumer = expression => `using Example.Data;
@@ -266,4 +268,72 @@ test(`a ${kind} sink owner is outside the ordinary-class binding proof`, async t
 test('a positional record sink owner is outside the ordinary-class binding proof', async t => {
   const source=consumer('$"SELECT {QueryText.Columns}"').replace('sealed class Reports', 'record Reports(int Id)');
   assert.ok((await findings(t, {'Reports.cs':source})).length);
+});
+
+const initializer = 'namespace Example.Auth; class Other : Base { public Other(string input) : base(input) {} }';
+function initializerProof(other, overrides = {}, factory = createCSharpConstMemberProof) {
+  const files = { 'Reports.cs': consumer('$"SELECT {QueryText.Columns}"'), 'Data/QueryText.cs': constants,
+    'Other.cs': other, ...overrides };
+  return factory(Object.entries(files).map(([file, raw]) => ({ file, raw })),
+    { projects: [{ file: 'Example.csproj', raw: project }] })('Reports.cs', 5);
+}
+
+for (const eol of ['\n', '\r\n']) test(`unrelated explicit initializer preserves a closed const-member proof (${JSON.stringify(eol)})`, async t => {
+  const other = initializer.replace(' : base', `${eol} : base`);
+  const parsed = parseCSharp(other);
+  assert.equal(parsed.complete, false);
+  assert.equal(parsed.coverage.parsedMethods, 0);
+  assert.equal(parsed.errors[0].code, 'unsupported-constructor-header');
+  assert.equal(initializerProof(other), true);
+  assert.equal((await findings(t, { 'Reports.cs': consumer('$"SELECT {QueryText.Columns}"'), 'Other.cs': other })).length, 0);
+  // Same file, disjoint owners: the known unsupported owner is still excluded.
+  assert.equal(initializerProof('', { 'Reports.cs': consumer('$"SELECT {QueryText.Columns}"') + '\n' +
+    initializer.replace('namespace Example.Auth; ', '') }), true);
+});
+
+for (const [label, other, overrides] of [
+  ['same sink owner', '', { 'Reports.cs': consumer('$"SELECT {QueryText.Columns}"').replace(' public void Run', ' public Reports() : this(1) {}\n public void Run') }],
+  ['constant owner', initializer, { 'Data/QueryText.cs': constants.replace('public const', 'public QueryText() : this(1) {} public const') }],
+  ['primary parameter in sink owner', initializer, { 'Reports.cs': consumer('$"SELECT {QueryText.Columns}"').replace('class Reports', 'class Reports(dynamic QueryText)') }],
+  ['primary default header', 'class Other(string input = "x") {}', {}],
+  ['primary base header', 'class Other(string input) : Base(input) {}', {}],
+  ['initializer parameter shadow', initializer.replace('string input', 'dynamic QueryText'), {}],
+  ['initializer out binding shadow', initializer.replace('base(input)', 'base(Read(out var QueryText))'), {}],
+  ['initializer pattern shadow', initializer.replace('base(input)', 'base(input is var QueryText)'), {}],
+  ['duplicate type in unsupported owner', initializer.replace(' {} }', ' {} class QueryText {} }'), {}],
+  ['duplicate type beside unsupported owner', initializer + ' class QueryText {}', {}],
+  ['unknown parser diagnostic', initializer.replace('{}', '{ goto done; done: return; }'), {}],
+  ['unclosed delimiter', initializer + ' class Broken {', {}],
+  ['mismatched delimiter', initializer.replace('base(input)', 'base(input]'), {}],
+  ['lexical diagnostic', initializer + ' "unterminated', {}],
+  ['conditional declaration', '#if DEBUG\n' + initializer + '\n#endif', {}],
+  ['global alias', initializer + ' using QueryText = Other.Type;', {}],
+]) test(`explicit initializer compatibility retains warning for ${label}`, () => {
+  assert.equal(initializerProof(other, overrides), false);
+});
+
+test('initializer diagnostic exceptions require exact known diagnostics and independent owner bounds', t => {
+  const parser = require('../src/parsers/csharp/parser');
+  const modulePath = require.resolve('../src/csharp-const-members'), cached = require.cache[modulePath];
+  t.after(() => { require.cache[modulePath] = cached; });
+  for (const mutate of [
+    p => { p.errors[0].code = 'future-header-error'; },
+    p => { p.errors[0].message = 'future constructor error'; },
+    p => { p.errors[0].ownerStart++; },
+    p => { p.errors[0].ownerEnd--; },
+    p => { p.errors[0].ownerEnd = Infinity; },
+    p => { p.errors[0].start = p.errors[0].ownerStart; },
+    p => { p.errors = []; },
+    p => { p.errors.push({ message: 'unrecognized', start: 0 }); },
+  ]) {
+    const mock = t.mock.method(parser, 'parseCSharp', raw => {
+      const parsed = parseCSharp(raw);
+      if (raw === initializer) mutate(parsed);
+      return parsed;
+    });
+    delete require.cache[modulePath];
+    const factory = require('../src/csharp-const-members').createCSharpConstMemberProof;
+    assert.equal(initializerProof(initializer, {}, factory), false);
+    mock.mock.restore();
+  }
 });

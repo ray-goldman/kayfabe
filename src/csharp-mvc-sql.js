@@ -186,8 +186,10 @@ function mvcSqlFindings({files, complete = true}) {
     const lineAt=offset=>{let lo=0,hi=starts.length;while(lo+1<hi){const mid=(lo+hi)>>>1;if(starts[mid]<=offset)lo=mid;else hi=mid;}return lo+1;};
     models.set(file.rel,{ts,pairs,positions:new Map(ts.map((t,i)=>[t.start,i])),imports:imports(ts),lineAt});
   }
-  const index = buildDotnetProjectIndex(cs.map(f=>({file:f.rel,source:f.code})));
-  if (index.diagnostics.truncated || index.diagnostics.fallbackFiles || index.methods.length > 512) return [];
+  // Context declarations are checked from tokens below. Unsupported explicit
+  // constructor owners contribute type metadata only, never method evidence.
+  const index = buildDotnetProjectIndex(cs.map(f=>({file:f.rel,source:f.code})), { isolateConstructorInitializers: true });
+  if (index.diagnostics.truncated || index.diagnostics.fallbackFiles !== index.diagnostics.isolatedConstructorFiles || index.methods.length > 512) return [];
   const types = new Map(index.types.map(t=>[t.id,t])), contexts = new Map();
   for (const type of index.types) {
     if (type.kind !== 'class' || type.ambiguous || type.partial || type.declarations.length !== 1 || !type.bases.includes('DbContext')) continue;
@@ -207,7 +209,9 @@ function mvcSqlFindings({files, complete = true}) {
   const out=[];
   for(const file of candidates){
     const data=models.get(file.rel);
-    for(const method of index.methods.filter(m=>m.file===file.rel&&!m.ambiguous)){
+    // MVC validates its own action grammar (including request attributes).
+    // Only constructor-isolated owners are excluded by this provenance gate.
+    for(const method of index.methods.filter(m=>m.file===file.rel&&!m.ambiguous&&!m.constructorOwnerIsolated)){
       const owner=types.get(method.typeId);if(!owner||owner.partial||owner.ambiguous||owner.name.includes('.')||!owner.bases.some(b=>['Controller','ControllerBase'].includes(b)))continue;
       const declaration=data.ts.findIndex(t=>t.start===owner.declarations[0].start),header=knownMetadata(prefix(data.ts,declaration),data,true);
       if(!header||!['public','publicsealed'].includes(joined(header))||data.ts[declaration+2]?.text==='<')continue;

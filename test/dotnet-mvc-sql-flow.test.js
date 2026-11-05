@@ -111,3 +111,88 @@ test('MVC SQL budgets and incomplete input decline only the additive rule',()=>{
   assert.deepEqual(mvcSqlFindings({files:[{...files[0],code},files[1]]}),[]);
  assert.deepEqual(mvcSqlFindings({files:[...files,...Array.from({length:999},(_,i)=>({rel:`Extra${i}.cs`,lang:'csharp',code:'class Extra {}'}))]}),[]);
 });
+
+const dbWithInitializer = db.replace(' public DbSet', ' public CatalogDb(DbContextOptions<CatalogDb> options) : base(options) {}\n public DbSet');
+// The generic index rejects attributed headers; MVC independently recognizes
+// these request sources. Constructor-owner isolation must not conflate the two.
+for (const attribute of ['', 'FromQuery', 'FromRoute', 'FromForm', 'FromHeader', 'FromServices'])
+ for (const initializer of [false, true]) for (const eol of ['\n', '\r\n'])
+  test(`MVC preserves ${attribute || 'bare'} parameter handling, initializer=${initializer}, ${JSON.stringify(eol)}`, async t => {
+   const annotated = body => controller(action(body).replace('string q', `${attribute ? '[' + attribute + '] ' : ''}string q`)).replaceAll('\n', eol);
+   const data = (initializer ? dbWithInitializer : db).replaceAll('\n', eol);
+   const source = annotated(flow);
+   assert.equal(hits(await findings(t, source, { 'Data.cs': data })).length, attribute === 'FromServices' ? 0 : 1);
+   const safe = flow.replace('$"SELECT * FROM Listings WHERE Name LIKE \'%{q}%\'"', '"SELECT * FROM Listings"');
+   assert.equal(hits(await findings(t, annotated(safe), { 'Data.cs': data })).length, 0);
+   const isolatedController = source.replace('public CatalogController(CatalogDb db)', 'public CatalogController(CatalogDb db) : base()');
+   assert.equal(hits(await findings(t, isolatedController, { 'Data.cs': data })).length, 0);
+  });
+
+test('constructor isolation provenance preserves generic index exclusions and default fallback behavior', () => {
+ const { buildDotnetProjectIndex } = require('../src/dotnet/project-index');
+ for (const eol of ['\n', '\r\n']) {
+  const source = (controller(action(flow).replace('string q', '[FromQuery] string q')) + '\n' + dbWithInitializer).replaceAll('\n', eol);
+  const files = [{ file: 'Combined.cs', source }];
+  const ordinary = buildDotnetProjectIndex(files);
+  assert.deepEqual(ordinary.methods, []);
+  assert.deepEqual(ordinary.types, []);
+  assert.deepEqual(ordinary.diagnostics, { fallbackFiles: 1, truncated: false });
+  const isolated = buildDotnetProjectIndex(files, { isolateConstructorInitializers: true });
+  assert.deepEqual(isolated.diagnostics, { fallbackFiles: 1, truncated: false, isolatedConstructorFiles: 1 });
+  const actionMethod = isolated.methods.find(m => m.name === 'Search');
+  assert.equal(actionMethod.unsupported, true);
+  assert.equal(actionMethod.constructorOwnerIsolated, false);
+  const contextMethods = isolated.methods.filter(m => m.typeId === 'Demo.Data.CatalogDb');
+  assert.ok(contextMethods.length);
+  assert.ok(contextMethods.every(m => m.unsupported && m.constructorOwnerIsolated));
+  const complete = [{ file: 'Controller.cs', source: controller(action(flow).replace('string q', '[FromQuery] string q')) }];
+  const defaultAction = buildDotnetProjectIndex(complete).methods.find(m => m.name === 'Search');
+  assert.equal(defaultAction.unsupported, true);
+  assert.equal(Object.hasOwn(defaultAction, 'constructorOwnerIsolated'), false);
+ }
+});
+
+test('MVC SQL retains real action flows with an unsupported context constructor initializer', async t => {
+ for (const eol of ['\n', '\r\n']) {
+  assert.equal(hits(await findings(t, controller(action(flow)), { 'Data.cs': dbWithInitializer.replaceAll('\n', eol) })).length, 1);
+  const sameFile = controller(action(flow)) + '\n' + dbWithInitializer;
+  assert.equal(hits(await findings(t, sameFile, { 'Data.cs': '' })).length, 1);
+  const safe = flow.replace('$"SELECT * FROM Listings WHERE Name LIKE \'%{q}%\'"', '"SELECT * FROM Listings"');
+  assert.equal(hits(await findings(t, controller(action(safe)), { 'Data.cs': dbWithInitializer })).length, 0);
+ }
+});
+
+test('MVC initializer isolation keeps owners, types, aliases and unknown diagnostics conservative', async t => {
+ const cases = [
+  [controller(action(flow)).replace('public CatalogController(CatalogDb db)', 'public CatalogController(CatalogDb db) : base()'), dbWithInitializer, ''],
+  [controller(action(flow)), dbWithInitializer.replace('class CatalogDb :', 'class CatalogDb(string input) :'), ''],
+  [controller(action(flow)), dbWithInitializer, 'namespace Demo.Data { class CatalogDb {} }'],
+  [controller(action(flow)), dbWithInitializer, 'class Other : Base { public Other() : base() {} class DbContext {} }'],
+  [controller(action(flow)), dbWithInitializer, 'using DbContext = CustomDb;'],
+  [controller(action(flow)), dbWithInitializer.replace('{}', '{ goto done; done: return; }'), ''],
+  [controller(action(flow)), dbWithInitializer + ' class Unclosed {', ''],
+  [controller(action(flow)), dbWithInitializer + ' "unterminated', ''],
+  [controller(action(flow)), dbWithInitializer.replace('public DbSet', 'private DbSet'), ''],
+  [controller(action(flow)), dbWithInitializer.replace('get; set;', 'get { return SafeQuery; }'), ''],
+ ];
+ for (const [source, data, other] of cases)
+  assert.equal(hits(await findings(t, source, { 'Data.cs': data, 'Other.cs': other })).length, 0, data + other);
+});
+
+test('opt-in initializer type indexing keeps truthful fallback coverage and unsupported methods', () => {
+ const { buildDotnetProjectIndex } = require('../src/dotnet/project-index');
+ const { parseCSharp } = require('../src/parsers/csharp/parser');
+ const files = [{ file: 'Data.cs', source: dbWithInitializer }];
+ const parsed = parseCSharp(dbWithInitializer);
+ assert.equal(parsed.complete, false);
+ assert.equal(parsed.coverage.parsedMethods, 0);
+ const ordinary = buildDotnetProjectIndex(files);
+ assert.equal(ordinary.types.length, 0);
+ assert.equal(ordinary.diagnostics.fallbackFiles, 1);
+ const isolated = buildDotnetProjectIndex(files, { isolateConstructorInitializers: true });
+ assert.equal(isolated.diagnostics.fallbackFiles, 1);
+ assert.equal(isolated.diagnostics.isolatedConstructorFiles, 1);
+ assert.ok(isolated.types.some(type => type.name === 'CatalogDb'));
+ assert.ok(isolated.methods.length);
+ assert.ok(isolated.methods.every(method => method.unsupported));
+});

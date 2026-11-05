@@ -2,6 +2,7 @@
 
 const { buildDotnetProjectIndex } = require('./dotnet/project-index');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
+const { parenthesizedMutationTokens } = require('./csharp-mutations');
 const SCALARS = new Set(['string', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal']);
 const id = token => token?.text.replace(/^@/, '');
 
@@ -60,6 +61,10 @@ function createCSharpValueProof(code, ast) {
     if (models.has(method.id)) return models.get(method.id);
     const ts = tokens.filter(t => t.start > method.bodyStart && t.end < method.bodyEnd);
     const root = { parent: null, bindings: new Map() }, scopes = new Map(), allBindings = [];
+    for (const parameter of method.primaryConstructorParameters || []) {
+      const binding = { key: method.id + ':primary:' + parameter.name, name: parameter.name, writes: [], invalid: true };
+      root.bindings.set(parameter.name, binding); allBindings.push(binding);
+    }
     for (const [n, parameter] of method.parameters.entries()) {
       const binding = { key: method.id + ':param:' + n, name: parameter.name, parameter: n, method, writes: [], invalid: false };
       root.bindings.set(parameter.name, binding); allBindings.push(binding);
@@ -72,7 +77,8 @@ function createCSharpValueProof(code, ast) {
       if(fields.has(name))shadowedFields.add(name);
     }
     for(const name of shadowedFields)fields.get(name).invalid=true;
-    const invalid = method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
+    const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(ts) : [];
+    const invalid = !wrappedWrites || method.primaryConstructorUnsupported || method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
       ['=>', 'ref', 'out', 'foreach', 'fixed', 'unsafe', 'goto', 'is', 'switch'].includes(t.text) ||
       t.text === '(' && pairs.has(positions.get(t.start)) && tokens[pairs.get(positions.get(t.start)) + 1]?.text === '{' &&
       !['if','while','for','switch','catch','using','lock'].includes(ts[i - 1]?.text));
@@ -102,6 +108,10 @@ function createCSharpValueProof(code, ast) {
     }
     const model = { method, ts, invalid, bindingAt, returns: [] };
     models.set(method.id, model);
+    for (const token of wrappedWrites || []) {
+      const binding = bindingAt(token);
+      if (binding) binding.invalid = true;
+    }
     for (const token of ts) {
       const open = positions.get(token.start), close = pairs.get(open);
       if (token.text !== '(' || tokens[close + 1]?.text !== '=') continue;
@@ -116,6 +126,7 @@ function createCSharpValueProof(code, ast) {
       const binding = bindingAt(token);
       if (binding && (['++','--','+=','-=','*=','/=','%=','??='].includes(ts[i + 1]?.text) ||
           ['++','--','ref','out'].includes(ts[i - 1]?.text) ||
+          method.hasPrimaryConstructor && ['<<','>>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=' ||
           ['&','|','^','%','<','>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=')) binding.invalid = true;
       if (binding && ts[i + 1]?.text === '=') {
         if (binding.parameter !== undefined) binding.invalid = true;
@@ -148,7 +159,7 @@ function createCSharpValueProof(code, ast) {
     if (tokens.some(t => t.kind === 'interpolated-string' || ['GetField','GetFields','SetValue','DynamicInvoke'].includes(t.text))) field.invalid = true;
   }
   const targets = name => methods.filter(m => m.name === name);
-  const shadowedName = name => methods.some(method => method.parameters.some(parameter => parameter.name === name)) ||
+  const shadowedName = name => methods.some(method => [...method.parameters, ...(method.primaryConstructorParameters || [])].some(parameter => parameter.name === name)) ||
     tokens.some((t, i) => id(t) === name && tokens[i - 1]?.text !== '.' && ['=', ';'].includes(tokens[i + 1]?.text));
   function helper(name) {
     const matches = targets(name);

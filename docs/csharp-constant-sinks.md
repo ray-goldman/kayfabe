@@ -14,6 +14,35 @@ with unsupported binding forms (foreach, catch, lambdas, anonymous delegates,
 out declarations, patterns, switch or fixed) defer to the scoped value proof;
 the legacy collector cannot resolve those bindings from a sibling literal.
 
+Primary-constructor class, struct and record headers do not count as methods.
+Plain primary parameter names are retained as unknown inputs in their members,
+including when a disjoint sibling block declares a same-named literal. Generic,
+partial, nested and unsupported primary ownership shapes do not gain a proof.
+Primary default parameters and base initializers, and explicit constructor
+initializers, select parser fallback because executable header behavior is not
+modeled. Coverage counts actual discovered method bodies and records unsupported
+primary headers separately. This does not infer primary input values from callers.
+Known constructor-header diagnostics carry their owning type's source range.
+An existing local proof in a disjoint type can proceed only when every parser
+error is one of these scoped diagnostics. Lexical and structural errors still
+block all proofs; the file remains incomplete for parser and project coverage.
+Newly eligible primary-owner methods also apply unsupported-binding guards to
+single-line sinks. Their legacy local proof requires exact keyword scalar types;
+unresolved `var`, `String`, aliases and other named types cannot inherit a
+same-named sibling literal. Empty primary parameter lists use the same boundary.
+Primary-member proofs decline bounded query starts (`from ... in`) before either
+proof path; range-variable values are unresolved even for literal enumerables.
+Exact tokens distinguish genuine query syntax from standalone `from`/`@from`
+identifiers and string/comment text. Relevant null-coalescing and split compound
+assignments invalidate primary-member values; unrelated mutations do not.
+Balanced parenthesized write targets and ref operands also invalidate their
+relevant bindings before proof acceptance, including field/helper fallback.
+This identifies unsupported writes rather than inferring alias values. The
+shared recognizer uses the existing 20,000-token ceiling and a fixed linear
+work budget; malformed or over-budget operands decline proof.
+The ordinary non-primary legacy query/compound-write weaknesses predate this
+ownership change and remain separate backlog work.
+
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments
 require a complete right-hand expression ending with a semicolon. `SqlCommand`
@@ -29,3 +58,23 @@ ownership, and unsupported expressions retain candidates. The two-megabyte file,
 Interpolated strings and broader type/helper inference remain outside this
 extension. Regex candidate coverage is unchanged; these are bounded syntactic
 proofs rather than complete C# analysis.
+
+The separate source-const-member interpolation proof can isolate a known explicit
+constructor-initializer diagnostic after independently checking its exact type
+bounds and constructor tokens. The affected type and overlapping types cannot
+supply constants or sink ownership. Every token and type remains in the global
+shadow, duplicate, import and build-input checks. Primary executable headers,
+unknown errors and malformed syntax still reject this proof.
+
+MVC SQL detection opts into the same bounded initializer isolation for type
+metadata: a DbContext declaration and its literal auto-property shape can still
+be inspected while all methods in the unsupported owner remain ineligible.
+The opt-in method metadata distinguishes constructor-owner isolation from the
+general unsupported-syntax flag. MVC excludes isolated owners, then applies its
+existing action grammar, including FromQuery, FromRoute, FromForm and FromHeader
+parameters; general index consumers still reject those attributed headers.
+Other project-index consumers retain their existing behavior. Parser completeness
+and fallback-file counts remain unchanged; the opt-in index separately reports
+isolated constructor files. The shared validator caps source at 100,000 characters,
+tokens at 20,000 and diagnostics at 512. It does not parse or evaluate initializer
+expressions or claim executable-header coverage.

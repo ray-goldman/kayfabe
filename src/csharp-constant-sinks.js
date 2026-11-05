@@ -3,9 +3,36 @@
 const { parseCSharp } = require('./parsers/csharp/parser');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { createCSharpValueProof } = require('./csharp-values');
+const { parenthesizedMutationTokens } = require('./csharp-mutations');
 
 const CONSTANT_TYPES = new Set(['string', 'String', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal', 'var']);
 const MAX_METHOD = 50000;
+
+// Header fallback is local to its owning type. Preserve an existing local
+// proof in a disjoint type without treating lexical/structural errors as safe.
+// The parser remains incomplete, so whole-file/project coverage stays honest.
+function methodComplete(parsed, method) {
+  return parsed.complete || parsed.errors?.length > 0 && parsed.errors.every(error =>
+    error.code === 'unsupported-constructor-header' && Number.isInteger(error.ownerStart) && Number.isInteger(error.ownerEnd) &&
+    error.ownerStart >= 0 && error.ownerEnd > error.ownerStart &&
+    (method.end <= error.ownerStart || method.start >= error.ownerEnd));
+}
+
+// Query range variables need their own binding scopes. Decline the bounded
+// query-start shape before either proof path can borrow a local/field/helper.
+// Exact token spelling keeps escaped identifiers, comments and strings inert.
+function hasQueryBindings(tokens, method) {
+  const typePunctuation = new Set(['.', '::', '<', '>', '>>', '[', ']', '?', ',', '(', ')']);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].start <= method.bodyStart || tokens[i].end >= method.bodyEnd || tokens[i].text !== 'from') continue;
+    for (let j = i + 1; j < tokens.length && tokens[j].end < method.bodyEnd; j++) {
+      if (tokens[j].text === 'in' && tokens[j - 1].kind === 'identifier') return true;
+      if (tokens[j].kind !== 'identifier' && !typePunctuation.has(tokens[j].text)) break;
+      if (j - i >= 256) return true;
+    }
+  }
+  return false;
+}
 
 function splitAtTopLevel(tokens, delimiter) {
   const parts = []; let start = 0, depth = 0;
@@ -106,17 +133,22 @@ function sinkExpression(tokens, ruleId, lineStart, lineEnd, methodStart = 0, met
   return expressions.length ? { expressions, multiline } : null;
 }
 
-function parseLocalDeclarations(tokens) {
+function parseLocalDeclarations(tokens, strictTypes = false) {
   const declarations = new Map();
   for (let i = 1; i < tokens.length; i++) {
     const name = tokens[i];
     if (name.kind !== 'identifier' || !['=', ';'].includes(tokens[i + 1]?.text)) continue;
     let previous = i - 1;
     while (previous >= 0 && ['?', ']', '['].includes(tokens[previous].text)) previous--;
-    if (!CONSTANT_TYPES.has(tokens[previous]?.text)) continue;
+    const type = tokens[previous]?.text;
+    // The newly eligible primary-owner domain cannot infer contextual var or
+    // imported String identity. Keep unsupported declarations in the inventory
+    // as invalid, so a same-named sibling literal cannot supply their evidence.
+    const invalid = strictTypes && (previous !== i - 1 || ['var', 'String'].includes(type) || !CONSTANT_TYPES.has(type) || tokens[previous - 1]?.text === '.');
+    if (strictTypes ? !(tokens[i - 1]?.kind === 'identifier' || ['?', ']', '>', '>>', ','].includes(tokens[i - 1]?.text)) : !CONSTANT_TYPES.has(type)) continue;
     const key = name.text.replace(/^@/, '');
     if (!declarations.has(key)) declarations.set(key, []);
-    declarations.get(key).push({ tokenIndex: i, nameIndex: i, type: tokens[previous].text });
+    declarations.get(key).push({ tokenIndex: i, nameIndex: i, type, invalid });
   }
   return declarations;
 }
@@ -139,7 +171,7 @@ function proveExpression(tokens, declarations, assignments, parameters, visiting
     if (['string', 'char', 'number'].includes(token.kind) || ['true', 'false', 'null'].includes(token.text)) return true;
     if (token.kind !== 'identifier') return false;
     const name = token.text.replace(/^@/, '');
-    if (parameters.has(name) || visiting.has(name) || declarations.get(name)?.length !== 1) return false;
+    if (parameters.has(name) || visiting.has(name) || declarations.get(name)?.length !== 1 || declarations.get(name)[0].invalid) return false;
     const writes = assignments.get(name) || [];
     if (!writes.length) return false;
     const next = new Set(visiting); next.add(name);
@@ -158,22 +190,26 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   const lineStart = lines.slice(0, line).reduce((sum, value) => sum + value.length + 1, 0);
   const lineEnd = lineStart + lines[line].length;
   const parsed = suppliedParse || parseCSharp(code);
-  if (!parsed.complete) return false;
   const methods = parsed.methods.filter(method => method.start <= lineStart && method.end >= lineEnd);
   if (methods.length !== 1) return false;
   const method = methods[0];
+  if (!methodComplete(parsed, method)) return false;
   if (method.end - method.start > MAX_METHOD) return false;
   const lexed = tokenizeCSharp(code.slice(method.start, method.end));
   if (lexed.errors.length || lexed.tokens.some(token => token.kind === 'interpolated-string')) return false;
   const tokens = lexed.tokens;
-  const methodParams = new Set((method.parameters || []).map(parameter => parameter.name));
-  const declarations = parseLocalDeclarations(tokens);
+  const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(tokens) : [];
+  if (!wrappedWrites) return false;
+  const methodParams = new Set([...(method.parameters || []), ...(method.primaryConstructorParameters || [])].map(parameter => parameter.name));
+  const declarations = parseLocalDeclarations(tokens, method.hasPrimaryConstructor);
   const assignments = new Map();
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i], name = token.text.replace(/^@/, '');
     if (token.kind !== 'identifier' || tokens[i - 1]?.text === '.') continue;
     if (tokens[i + 1]?.text !== '=' || tokens[i + 2]?.text === '=') continue;
-    if (!declarations.has(name)) continue;
+    // Invalid type bindings can never prove a value. Do not parse unrelated
+    // parameter defaults or unsupported declarations as executable writes.
+    if (!declarations.has(name) || declarations.get(name).some(declaration => declaration.invalid)) continue;
     let end = i + 2, nesting = 0;
     for (; end < tokens.length; end++) {
       if (['(', '[', '{'].includes(tokens[end].text)) nesting++;
@@ -190,7 +226,7 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   // not extend it to newly complete expressions in such methods: a sibling
   // literal with the same spelling is not evidence about the actual binding.
   // The scoped value proof can still establish safety within its own subset.
-  if (sink.multiline && tokens.some(token => ['foreach', 'catch', '=>', 'delegate', 'out', 'is', 'switch', 'fixed'].includes(token.text))) return false;
+  if ((sink.multiline || method.hasPrimaryConstructor) && tokens.some(token => ['foreach', 'catch', '=>', 'delegate', 'out', 'is', 'switch', 'fixed'].includes(token.text))) return false;
   const expression = sink.expressions;
   // Newly supported overloads/multiple sinks use the stricter scoped proof;
   // do not expand the legacy proof's acceptance of unresolved named types.
@@ -205,11 +241,13 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
       if (token.kind === 'identifier') pending.push(token.text.replace(/^@/, ''));
     }
   }
+  if (wrappedWrites.some(token => relevant.has(token.text.replace(/^@/, '')))) return false;
   for (let i = 0; i < tokens.length; i++) {
     const name = tokens[i].kind === 'identifier' ? tokens[i].text.replace(/^@/, '') : null;
     if (!name || !relevant.has(name)) continue;
     if (['++', '--', '+=', '-=', '*=', '/=', '%='].includes(tokens[i + 1]?.text) || ['++', '--'].includes(tokens[i - 1]?.text) ||
-        ['ref', 'out'].includes(tokens[i - 1]?.text)) return false;
+        ['ref', 'out'].includes(tokens[i - 1]?.text) || method.hasPrimaryConstructor &&
+        (tokens[i + 1]?.text === '??=' || ['%', '&', '|', '^', '<<', '>>'].includes(tokens[i + 1]?.text) && tokens[i + 2]?.text === '=')) return false;
     if (tokens[i + 1]?.text === '=>' && tokens.slice(i + 2).some(token => token.kind === 'identifier' && relevant.has(token.text.replace(/^@/, '')))) return false;
   }
   const opens=[];
@@ -229,7 +267,6 @@ function createCSharpConstantSinkProof(code) {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
     parsed ||= parseCSharp(code);
-    if (!parsed.complete) return false;
     const lines = code.split('\n');
     if (line >= lines.length) return false;
     const start = lines.slice(0, line).reduce((sum, text) => sum + text.length + 1, 0);
@@ -237,6 +274,12 @@ function createCSharpConstantSinkProof(code) {
     const methods = parsed.methods.filter(method => method.start < end && method.end > start);
     if (methods.length !== 1 || methods[0].end - methods[0].start > MAX_METHOD) return false;
     const method = methods[0];
+    if (!methodComplete(parsed, method)) return false;
+    if (method.primaryConstructorUnsupported) return false;
+    if (method.hasPrimaryConstructor) {
+      tokens ||= tokenizeCSharp(code).tokens;
+      if (hasQueryBindings(tokens, method)) return false;
+    }
     // Both proof paths need the same unique ownership gate. Whole-line
     // containment alone can miss a local function starting on that line.
     if (directConstantSink({ code, line, ruleId, parsed })) return true;
