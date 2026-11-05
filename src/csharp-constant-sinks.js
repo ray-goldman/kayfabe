@@ -7,6 +7,16 @@ const { createCSharpValueProof } = require('./csharp-values');
 const CONSTANT_TYPES = new Set(['string', 'String', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal', 'var']);
 const MAX_METHOD = 50000;
 
+// Header fallback is local to its owning type. Preserve an existing local
+// proof in a disjoint type without treating lexical/structural errors as safe.
+// The parser remains incomplete, so whole-file/project coverage stays honest.
+function methodComplete(parsed, method) {
+  return parsed.complete || parsed.errors?.length > 0 && parsed.errors.every(error =>
+    error.code === 'unsupported-constructor-header' && Number.isInteger(error.ownerStart) && Number.isInteger(error.ownerEnd) &&
+    error.ownerStart >= 0 && error.ownerEnd > error.ownerStart &&
+    (method.end <= error.ownerStart || method.start >= error.ownerEnd));
+}
+
 function splitAtTopLevel(tokens, delimiter) {
   const parts = []; let start = 0, depth = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -158,15 +168,15 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   const lineStart = lines.slice(0, line).reduce((sum, value) => sum + value.length + 1, 0);
   const lineEnd = lineStart + lines[line].length;
   const parsed = suppliedParse || parseCSharp(code);
-  if (!parsed.complete) return false;
   const methods = parsed.methods.filter(method => method.start <= lineStart && method.end >= lineEnd);
   if (methods.length !== 1) return false;
   const method = methods[0];
+  if (!methodComplete(parsed, method)) return false;
   if (method.end - method.start > MAX_METHOD) return false;
   const lexed = tokenizeCSharp(code.slice(method.start, method.end));
   if (lexed.errors.length || lexed.tokens.some(token => token.kind === 'interpolated-string')) return false;
   const tokens = lexed.tokens;
-  const methodParams = new Set((method.parameters || []).map(parameter => parameter.name));
+  const methodParams = new Set([...(method.parameters || []), ...(method.primaryConstructorParameters || [])].map(parameter => parameter.name));
   const declarations = parseLocalDeclarations(tokens);
   const assignments = new Map();
   for (let i = 0; i < tokens.length; i++) {
@@ -229,7 +239,6 @@ function createCSharpConstantSinkProof(code) {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
     parsed ||= parseCSharp(code);
-    if (!parsed.complete) return false;
     const lines = code.split('\n');
     if (line >= lines.length) return false;
     const start = lines.slice(0, line).reduce((sum, text) => sum + text.length + 1, 0);
@@ -237,6 +246,8 @@ function createCSharpConstantSinkProof(code) {
     const methods = parsed.methods.filter(method => method.start < end && method.end > start);
     if (methods.length !== 1 || methods[0].end - methods[0].start > MAX_METHOD) return false;
     const method = methods[0];
+    if (!methodComplete(parsed, method)) return false;
+    if (method.primaryConstructorUnsupported) return false;
     // Both proof paths need the same unique ownership gate. Whole-line
     // containment alone can miss a local function starting on that line.
     if (directConstantSink({ code, line, ruleId, parsed })) return true;

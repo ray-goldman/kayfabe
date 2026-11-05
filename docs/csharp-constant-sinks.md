@@ -14,6 +14,19 @@ with unsupported binding forms (foreach, catch, lambdas, anonymous delegates,
 out declarations, patterns, switch or fixed) defer to the scoped value proof;
 the legacy collector cannot resolve those bindings from a sibling literal.
 
+Primary-constructor class, struct and record headers do not count as methods.
+Plain primary parameter names are retained as unknown inputs in their members,
+including when a disjoint sibling block declares a same-named literal. Generic,
+partial, nested and unsupported primary ownership shapes do not gain a proof.
+Primary default parameters and base initializers, and explicit constructor
+initializers, select parser fallback because executable header behavior is not
+modeled. Coverage counts actual discovered method bodies and records unsupported
+primary headers separately. This does not infer primary input values from callers.
+Known constructor-header diagnostics carry their owning type's source range.
+An existing local proof in a disjoint type can proceed only when every parser
+error is one of these scoped diagnostics. Lexical and structural errors still
+block all proofs; the file remains incomplete for parser and project coverage.
+
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments
 require a complete right-hand expression ending with a semicolon. `SqlCommand`

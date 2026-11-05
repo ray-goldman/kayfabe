@@ -1,0 +1,7 @@
+{
+  "id": "a05-csharp-primary-constructors",
+  "owasp": "A05",
+  "cwe": [78, 89],
+  "description": "Primary constructor inputs stay unknown while independent member-local literals prove fixed SQL and command text.",
+  "expect": ["CS-SQLI-001", "CS-CMDI-001"]
+}
