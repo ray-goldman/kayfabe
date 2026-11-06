@@ -1,0 +1,7 @@
+{
+  "id": "java-sql-empty-metadata",
+  "owasp": "A05",
+  "cwe": [89],
+  "description": "Exact empty Object-array auxiliary arguments and class literals permit constant SQL; changed request input retains the original SQL findings.",
+  "expect": ["JAVA-SQLI-001", "JAVA-SQLI-002"]
+}
