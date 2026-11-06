@@ -15,7 +15,7 @@ async function findings(t, source, ruleId) {
     fs.rmSync(resolved, { recursive: true, force: true });
   });
   fs.writeFileSync(path.join(root, 'Example.java'), source);
-  return (await scan(root, { includeTests: true })).findings.filter(f => f.ruleId === ruleId);
+  return (await scan(root, { includeTests: true })).findings.filter(f => !ruleId || f.ruleId === ruleId);
 }
 
 test('constant SQL in a neighboring method does not inherit request data', async (t) => {
@@ -637,5 +637,78 @@ test('execute call proof rejects calls beyond the existing expression and window
       sqlStatement.execute("SELECT name FROM users WHERE id=" + data${tail}
     } }`;
     assert.ok((await findings(t, source, 'JAVA-SQLI-002')).length, tail.length);
+  }
+});
+
+test('an inner execute result plus request syntax retains the complete request-to-JDBC warning', async (t) => {
+  const hits = await findings(t, `class Example {
+  interface Request { String getParameter(String name); }
+  static class Formatter {
+    String execute(String prefix) { return prefix; }
+  }
+  static class Channel {
+    java.sql.Connection connection;
+    void send(String sql) throws java.sql.SQLException {
+      connection.createStatement().execute(sql);
+    }
+  }
+  Formatter formatter = new Formatter();
+  void run(Request request, Channel channel) throws java.sql.SQLException {
+    String data = "fixed";
+    String input = request.getParameter("name");
+    String query = formatter.execute("SELECT name FROM users WHERE name='" + data) + input + "'";
+    channel.send(query);
+  }
+}`);
+  assert.deepEqual(hits.map(({ ruleId, line }) => ({ ruleId, line })), [
+    { ruleId: 'JAVA-SQLI-002', line: 16 },
+  ]);
+});
+
+for (const [name, context] of [
+  ['assignment concatenation', inner => `String query = ${inner} + input; channel.send(query);`],
+  ['return concatenation', inner => `return ${inner} + input;`],
+  ['outer-call concatenation', inner => `channel.send(${inner} + input);`],
+  ['outer-call dynamic sibling', inner => `channel.send(${inner}, input);`],
+  ['unknown wrapper', inner => `String query = decorate(${inner}, input); channel.send(query);`],
+  ['receiver concat', inner => `String query = ${inner}.concat(input); channel.send(query);`],
+  ['prefix concatenation', inner => `String query = input + ${inner}; channel.send(query);`],
+]) {
+  test(`SQL call argument proofs cannot cover enclosing ${name}`, async (t) => {
+    // Existing sink names gain the same context check: .class must not expose
+    // the former call-span assumption through the declaration-bailout change.
+    for (const call of [
+      'formatter.execute("SELECT name FROM users WHERE name=" + data)',
+      'formatter.execute("SELECT name FROM users WHERE name=" + data, Long.class)',
+      'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, Long.class)',
+    ]) {
+      const source = `class Example {
+        String data = request.getParameter("outer");
+        ${name === 'return concatenation' ? 'String' : 'void'} run(HttpServletRequest request) {
+          String data = "fixed";
+          String input = request.getParameter("name");
+          ${context(call)}
+        }
+      }`;
+      assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })), [
+        { ruleId: 'JAVA-SQLI-002', line: 6 },
+      ], call);
+    }
+  });
+}
+
+test('complete SQL calls and direct result assignments retain their independent proof', async (t) => {
+  for (const statement of [
+    'formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'String query = formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'final String query = formatter.execute("SELECT name FROM users WHERE name=" + data, Long.class);',
+    'query = formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, Long.class);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed";
+      ${statement}
+    } }`;
+    assert.deepEqual(await findings(t, source), [], statement);
   }
 });

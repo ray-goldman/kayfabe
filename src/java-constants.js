@@ -263,6 +263,38 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
   }
   const offsets = [0];
   for (let i = 0; i < code.length; i++) if (code[i] === '\n') offsets.push(i + 1);
+  const statementBoundaries = new Map();
+  function completeCallStatement(method, pos, start, end, windowEnd) {
+    if (!statementBoundaries.has(method)) {
+      const boundaries = new Set([method.start - 1]), stack = [];
+      let valid = method.end - method.start <= 50000;
+      for (let i = method.start; valid && i < method.end; i++) {
+        const c = masked[i];
+        if (c === '(' || c === '[') {
+          if (stack.length >= 64) { valid = false; break; }
+          stack.push(c);
+        } else if (c === ')' || c === ']') {
+          if (stack.pop() !== (c === ')' ? '(' : '[')) valid = false;
+        } else if (';{}'.includes(c) && !stack.length) boundaries.add(i);
+      }
+      statementBoundaries.set(method, valid && !stack.length ? boundaries : null);
+    }
+    const boundary = Math.max(method.start - 1, masked.lastIndexOf(';', pos - 1),
+      masked.lastIndexOf('{', pos - 1), masked.lastIndexOf('}', pos - 1));
+    if (!statementBoundaries.get(method)?.has(boundary) || start - boundary > 4000) return false;
+    // Only a complete member-call statement or direct result assignment is
+    // supported. An inner call's arguments say nothing about its return value
+    // in an enclosing concatenation, wrapper, sibling argument or receiver.
+    let prefix = masked.slice(boundary + 1, start - 1);
+    const assignment = prefix.match(/^\s*(?:(?:final\s+)?[A-Za-z_$][\w$]*\s+)?[A-Za-z_$][\w$]*\s*=\s*/);
+    if (assignment) prefix = prefix.slice(assignment[0].length);
+    const tokens = prefix.match(/[A-Za-z_$][\w$]*|\S/g) || [];
+    if (tokens.length < 3 || tokens.length % 2 !== 1 ||
+        !tokens.every((token, index) => index % 2 ? token === '.' : /^[A-Za-z_$][\w$]*$/.test(token))) return false;
+    let after = end;
+    while (after < windowEnd && /\s/.test(masked[after])) after++;
+    return after < windowEnd && masked[after] === ';';
+  }
   const filter = (line, window, sink, allArgs) => {
     const lineStart = offsets[line];
     const re = new RegExp(sink.source, sink.flags.replace(/[gy]/g, '') + 'g');
@@ -312,6 +344,7 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       const args = callArgs(code.slice(pos, end), match[0].length);
       if (!args.length || !args.every((arg, index) =>
         proof(method)(arg, new Set(), pos - method.start) || index > 0 && classLiteralMetadata(arg))) return false;
+      if (!completeCallStatement(method, pos, start, end, Math.min(method.end, lineStart + window.length))) return false;
       calls.push([pos, end]);
     }
     const re = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '') + 'g');
