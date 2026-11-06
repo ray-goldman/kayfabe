@@ -394,6 +394,10 @@ function canonicalStringScope({ index, position, project, budget }) {
   const sourceType = name => project.classes.has(name) ||
     project.classes.has([packageName, name].filter(Boolean).join('.'));
   if (sourceType('String') || sourceType('java') || project.classes.has('java.lang.String')) return false;
+  // Fresh response output needs no servlet superclass. Its qualified response
+  // spelling can still resolve through a source/imported namespace type, so
+  // certify these roots before implicit or explicit Object can return success.
+  if (['javax', 'jakarta'].some(root => sourceType(root) || imports.has(root))) return false;
   if (!parent) return !project.classes.has('java.lang.Object');
   if (!parent.includes('.') && sourceType(parent)) return false;
   const qualified = parent.includes('.') ? parent : imports.get(parent) || (parent === 'Object' ? 'java.lang.Object' : null);

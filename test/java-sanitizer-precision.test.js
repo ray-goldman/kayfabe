@@ -20,6 +20,86 @@ const independentServletSource = (body, methods) => `${explicitServletImports}
     }
   }`;
 
+function freshResponseCopy(namespace, { root = 'default', parent = '', kind = 'print', tainted = false, shadow = true } = {}) {
+  const { buildJavaProjectIndex } = require('../src/java-project');
+  const { stripComments } = require('../src/languages');
+  const { independentCharCopy } = require('../src/java-independent-char-copy');
+  const { canonicalStringScope } = require('../src/java-independent-return');
+  const { javaOutputFilter } = require('../src/java-sanitizers');
+  const packageText = root === 'same-package' ? 'package app;' : root === 'spaced-package' ? 'package app /* gap */ . nested;' : '';
+  const imported = root === 'imported' ? `import fake.${namespace};` : root === 'spaced-import' ? `import fake /* gap */ . ${namespace};` : '';
+  const source = `${packageText} import api.Request; ${imported}
+public class Example${parent} {
+  private String choose(Request request, String input) { return ${tainted ? 'input' : '"fixed"'}; }
+  public void handle(Request request, ${namespace}.servlet.http.HttpServletResponse response) throws java.io.IOException {
+    response.resetBuffer(); response.setContentType("text/html");
+    String input = request.getParameter("value");
+    String selected = choose(request, input);
+    response.getWriter().${kind}(selected.toCharArray());
+  }
+}`;
+  const shadowPackage = ['imported', 'spaced-import'].includes(root) ? 'package fake;' : packageText;
+  const files = { 'Example.java': source, 'api/Request.java': 'package api; public interface Request { String getParameter(String name); }' };
+  if (shadow) files[`${namespace}.java`] = `${shadowPackage} import api.Request;
+public class ${namespace} {
+  public static class servlet { public static class http { public static class HttpServletResponse {
+    private final Request request; private final java.io.PrintWriter writer;
+    public HttpServletResponse(Request request, java.io.PrintWriter writer) { this.request = request; this.writer = writer; }
+    public void resetBuffer() { }
+    public void setContentType(java.lang.String type) { }
+    public java.io.PrintWriter getWriter() { writer.write(request.getParameter("value")); return writer; }
+  } } }
+}`;
+  const project = buildJavaProjectIndex(Object.entries(files).map(([file, raw]) => ({ file, raw, code: stripComments(raw, 'java') })));
+  const filter = project.byFile.get('Example.java').filter, index = filter.index;
+  const statement = `response.getWriter().${kind}(selected.toCharArray());`;
+  const position = index.code.indexOf(statement), line = index.code.slice(0, position).split('\n').length - 1;
+  const call = { position, end: position + statement.length - 1, kind, args: ['selected.toCharArray()'] };
+  return { files, project, line,
+    provenance: filter.independentOutputValuesAt([{ expression: 'selected', position }]),
+    canonical: canonicalStringScope({ index, position, project, budget: { left: 10000 } }),
+    copy: independentCharCopy({ index, filter, project, call, windowStart: position, windowEnd: position + statement.length }),
+    output: javaOutputFilter({ code: index.code, filter, project })(line, index.code.split('\n')[line]) };
+}
+
+test('fresh-response copy namespace guard retains canonical safe and selected-taint twins', async t => {
+  for (const namespace of ['javax', 'jakarta']) for (const kind of ['print', 'println']) {
+    for (const parent of ['', ' extends java.lang.Object']) {
+      const safe = freshResponseCopy(namespace, { kind, parent, shadow: false });
+      assert.equal(safe.provenance, true);
+      assert.equal(safe.copy, true);
+      assert.equal(safe.output, true);
+      assert.deepEqual(await findings(t, '', '', safe.files), []);
+      const tainted = freshResponseCopy(namespace, { kind, parent, tainted: true });
+      assert.equal(tainted.provenance, false);
+      assert.equal(tainted.copy, false);
+      assert.equal(tainted.output, false);
+      assert.deepEqual((await findings(t, '', '', tainted.files)).filter(hit => hit.file === 'Example.java')
+        .map(({ ruleId, line }) => ({ ruleId, line })), [{ ruleId: 'JAVA-XSS-001', line: 8 }]);
+    }
+  }
+});
+
+test('fresh-response copy namespace guard rejects initialized source response callbacks', async t => {
+  for (const namespace of ['javax', 'jakarta']) for (const root of ['default', 'same-package', 'imported', 'spaced-import', 'spaced-package']) {
+    for (const parent of ['', ' extends java.lang.Object']) for (const kind of ['print', 'println']) {
+      await t.test([namespace, root, parent || 'implicit Object', kind].join(' '), async t => {
+        const proof = freshResponseCopy(namespace, { root, parent, kind });
+        const hits = (await findings(t, '', '', proof.files)).filter(hit => hit.file === 'Example.java')
+          .map(({ ruleId, line }) => ({ ruleId, line }));
+        t.diagnostic(JSON.stringify({ provenance: proof.provenance, canonical: proof.canonical,
+          copy: proof.copy, output: proof.output, hits }));
+        assert.equal(proof.project.complete, true);
+        assert.equal(proof.provenance, true, 'old no-atom helper remains independent; its String cannot prevent a writer callback');
+        assert.equal(proof.canonical, false, 'source namespace shadows cannot gain the new certificate through implicit Object');
+        assert.equal(proof.copy, false);
+        assert.equal(proof.output, false, 'the exact current output window must retain its warning');
+        assert.deepEqual(hits, [{ ruleId: 'JAVA-XSS-001', line: 8 }]);
+      });
+    }
+  }
+});
+
 test('literal charAt helper feeds current print and println copy without encoding or replay facts', async t => {
   const helper = `private String choose(HttpServletRequest request, String input) {
     String guess = "ABC"; char chosen = guess.charAt(1); String answer;
