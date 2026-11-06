@@ -333,3 +333,56 @@ test('unsupported identifier guard does not contaminate ordinary single-line com
     for (const line of order) assert.equal(prove(line, 'CS-SQLI-001'), line === 3);
   }
 });
+
+const commentSeparators = { CR: '\r', NEL: '\u0085', LS: '\u2028', PS: '\u2029' };
+const commentNames = { escaped: '\\u0076alue', formatting: 'v\u200calue', plain: 'value' };
+function commentFixture(separator, name, context, inert) {
+  const fixture = identityFixture(name, context, '\n');
+  fixture.code = fixture.code.replace(`${name} = input;`, inert ? `/* ignored${separator} ${name} = input; */` : `// ignored${separator} ${name} = input;`);
+  return fixture;
+}
+for (const [separatorName, separator] of Object.entries(commentSeparators)) {
+  for (const [name, spelling] of Object.entries(commentNames)) {
+    for (const context of ['sql', 'process']) {
+      test(`strict comment boundary ${separatorName}/${name}/${context}`, () => {
+        for (const inert of [false, true]) {
+          const { code, line, rule } = commentFixture(separator, spelling, context, inert);
+          assert.equal(createCSharpConstantSinkProof(code)(line, rule), inert);
+        }
+      });
+    }
+  }
+}
+
+test('engine retains writes hidden by unsupported line-comment boundaries', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-comment-boundary-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [separatorName, separator] of Object.entries(commentSeparators)) {
+    for (const [name, spelling] of Object.entries(commentNames)) {
+      for (const context of ['sql', 'process']) {
+        for (const inert of [false, true]) {
+          const { code, line, rule } = commentFixture(separator, spelling, context, inert);
+          const file = `${separatorName}-${name}-${context}-${inert}.cs`;
+          fs.writeFileSync(path.join(root, file), code);
+          if (!inert) expected.push([file, rule, line + 1]);
+        }
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => ['CS-SQLI-001', 'CS-CMDI-001'].includes(f.ruleId)).map(f => [f.file, f.ruleId, f.line]).sort(), expected.sort());
+});
+
+test('strict comment boundary preserves LF, CRLF, inert literals and EOF comments', () => {
+  for (const eol of ['\n', '\r\n']) {
+    assert.equal(proof('string value = "fixed"; // inert write: value = input;\n Process.Start("cmd.exe", "/c " + // sink\n value);', undefined, eol), true);
+    assert.equal(proof('string value = "fixed"; // comment\n value = input;\n Process.Start("cmd.exe", "/c " + // sink\n value);', undefined, eol), false);
+  }
+  for (const separator of Object.values(commentSeparators)) {
+    assert.equal(proof(`string value = @"inert${separator}value = input;";\n Process.Start("cmd.exe", "/c " + // sink\n value);`), true);
+  }
+  const code = 'class Sample {\n void Run() {\n Process.Start("cmd.exe", "/c " +\n "status");\n }\n} // comment at EOF';
+  assert.equal(createCSharpConstantSinkProof(code)(2, 'CS-CMDI-001'), true);
+  assert.equal(createCSharpConstantSinkProof(code.replace('// comment at EOF', '/* unterminated'))(2, 'CS-CMDI-001'), false);
+});

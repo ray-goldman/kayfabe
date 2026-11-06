@@ -59,6 +59,15 @@ U+FEFF) and supplementary code points. One leading BOM is allowed. Strings,
 character literals, comments and ordinary `@` identifiers remain inert/supported.
 This file-wide rejection covers helper and field-writer alternatives without
 introducing Unicode normalization or changing the ordinary single-line context.
+The same boundary declines `//` comment spans containing a bare CR, NEL, line
+separator or paragraph separator. C# ends the comment there, but the lexer only
+models LF/CRLF and may have swallowed an ordinary executable write as well as
+an alternative identifier. Merely resuming the physical scan is insufficient.
+Normal LF/CRLF comments, EOF comments, and separators inside literal tokens or
+block comments remain supported; no lexer newline normalization is introduced.
+The scanner supplies original physical source to this strict gate separately
+from its existing comment-stripped candidate/proof input. Otherwise stripping
+would erase precisely the unsupported comment span that needs rejection.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

@@ -14,8 +14,15 @@ function hasUnsupportedIdentifierSpelling(source, tokens) {
       continue;
     }
     if (source.startsWith('//', offset)) {
-      const end = source.indexOf('\n', offset + 2);
-      offset = end < 0 ? source.length : end;
+      let end = offset + 2;
+      for (; end < source.length && source[end] !== '\n'; end++) {
+        // C# also terminates line comments at CR/NEL/LS/PS. The lexer has
+        // already swallowed those spans, including possible ordinary writes;
+        // scanning only for alternative names after them cannot repair that.
+        // CR immediately before LF is the supported CRLF ending.
+        if (/[\r\u0085\u2028\u2029]/.test(source[end]) && !(source[end] === '\r' && source[end + 1] === '\n')) return true;
+      }
+      offset = end;
       continue;
     }
     if (source.startsWith('/*', offset)) {

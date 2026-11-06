@@ -246,8 +246,8 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse, strictB
   return expression.every(value => proveExpression(value, declarations, assignments, methodParams));
 }
 
-function createCSharpConstantSinkProof(code) {
-  let parsed, tokens, proveValue, proveStrictValue, unsupportedIdentity;
+function createCSharpConstantSinkProof(code, { physicalSource = code } = {}) {
+  let parsed, tokens, physicalTokens, proveValue, proveStrictValue, unsupportedIdentity;
   return (line, ruleId) => {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
@@ -267,7 +267,13 @@ function createCSharpConstantSinkProof(code) {
     // Complete expressions enter the same conservative binding domain as
     // primary owners. Establish it before either direct or scoped acceptance.
     const strictBindings = !!(method.hasPrimaryConstructor || sink.multiline);
-    if (strictBindings && (unsupportedIdentity ??= hasUnsupportedIdentifierSpelling(code, tokens))) return false;
+    if (strictBindings) {
+      // The engine's candidate stream has comments stripped. Retain original
+      // physical spans for this gate without changing legacy proof input.
+      if (typeof physicalSource !== 'string' || physicalSource.length > 2 * 1024 * 1024) return false;
+      physicalTokens ||= physicalSource === code ? tokens : tokenizeCSharp(physicalSource).tokens;
+      if (unsupportedIdentity ??= hasUnsupportedIdentifierSpelling(physicalSource, physicalTokens)) return false;
+    }
     if (strictBindings && hasQueryBindings(tokens, method)) return false;
     // Both proof paths need the same unique ownership gate. Whole-line
     // containment alone can miss a local function starting on that line.
