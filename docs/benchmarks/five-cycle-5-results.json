@@ -1,7 +1,7 @@
 {
   "schema": "kayfabe-five-cycle-results@1",
   "cycle": 5,
-  "measuredAt": "2026-11-06T00:00:23.687Z",
+  "measuredAt": "2026-11-06T00:41:34.351Z",
   "sources": [
     {
       "commit": "47d0a80f7faaf21eac2e27a136fe893ee07bc397",
@@ -14,14 +14,14 @@
       "normalizedFiles": 1081
     },
     {
-      "commit": "5c8f6f0f8ff3d8756316ec55bb96111a9da8db6e",
-      "tree": "cd2f93be4814fbba21211bd635a5c5b67be51525",
-      "files": 1101,
-      "sourceSha256": "3246c857fc825a515e349d9bb69879292ccfedf9fd6f1186ddd595aaedfb5aaa",
-      "archiveSha256": "c6ce8dce05a0e62ad86642bfee47e4568dd9bd6eab2a21f0902e8915699dfa8f",
-      "inventorySha256": "1ea2867e5f44cfb022ffb479ce82362b2d72d51b82f1222d2c1e8e131522a0f3",
+      "commit": "6fd12a5cdcebd204360215a4767d55af390a5fae",
+      "tree": "d7dadf63e172ee5e22decf828728ee313c25c46f",
+      "files": 1111,
+      "sourceSha256": "b9accd4f839b69c6aa9d6bb516024daf02e9537f21409a01f32d59970704178b",
+      "archiveSha256": "f4ba94365053ffabdd6de66ba078b8974b64162f9e2dafb0e4cc317fcb0efbc3",
+      "inventorySha256": "dfddaf69eda154828c03a91cbfd46f73c4f83202f766b68bfecbcd09bd238946",
       "gitComparison": "Exact blob bytes; CRLF to LF only for verified UTF-8 text when needed",
-      "normalizedFiles": 1092
+      "normalizedFiles": 1102
     }
   ],
   "evaluatorPolicyFilesVerified": 26,
@@ -68,7 +68,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "097c22800326e705e98c3eee8cbf2752015327856f5b46907a6529a654d7054c",
-      "afterReportSha256": "e83026972120a8fef069d36c18897ed2539fa76485db39841aaac85499af6f12"
+      "afterReportSha256": "58205975c17f529a740cd3cad97d5ccaff4e21fef21a973e15048f3abf415fde"
     },
     "owasp-java": {
       "inputSha256": "aa8e0b1bdc78551ba2154ba7b65ee62c054cd576e0cd6f6ef90ec87e060e707d",
@@ -107,7 +107,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "a4f058a19f0d75ca06461f5677b5c8fbb425841d80200bfa2678d4e41d99e319",
-      "afterReportSha256": "cf821f649756ea0b601eb1f2325befe8f48e62e0636bad97722c094de27d3386"
+      "afterReportSha256": "e2d4c41e6bae4d354b00468971e226dc0b214107fbdd6ff7bc9c42facc25a114"
     },
     "juliet-java": {
       "inputSha256": "a1f620b0525b3c18048cbdfabda2bf18f1fbec59bd34204eb5b3ea9da8d31905",
@@ -155,7 +155,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "e337d3194e8bddbe29785590c1fb8296267befb063a63e0bf1b86ee9385e2085",
-      "afterReportSha256": "754a3f1756c92066639ccb57324f138882ab1d36ff76cd16f003dc55f8da89e3"
+      "afterReportSha256": "909fc591da23c246eea1f342c2b4a020c282130f5a46a273803bc1e386eeb9bd"
     },
     "sard": {
       "inputSha256": "a2a2ce017a0ae7425b3011b275bb70d9cbbeffe258f03bba2b74f975455e07ec",
@@ -201,7 +201,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "50cd1a5a338704ef5956c77adc7964bf0aa91d7d6c886b7654aa2c4d398783e2",
-      "afterReportSha256": "1a83cd822c182a5691a6d62e43bf79e9357efafc08092827810e4ab0782b2960"
+      "afterReportSha256": "bf7f29db23a922a5febb18f85b7e48073ed1692142da4837bf5b5050bbbdecf6"
     },
     "cve-fixes": {
       "inputSha256": "854acf4a769874fa8cb8b6ace227cc47fd6b5996a8404d649326039e00449734",
@@ -243,7 +243,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "cee91e0694971e191665bc06b1786d816858ce01195a784abb038f624225d13b",
-      "afterReportSha256": "52cc8216054346f9dc2889bdfcf3681ef2178956e6c40c00eb8465efdfd53d8c",
+      "afterReportSha256": "d7fdf09d6208cb62536f01f4ff5e6135354fb2ddb7c091ee042df27499c3d78a",
       "originalPairs": {
         "before": {
           "total": 8,
@@ -343,7 +343,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "569cc2c8abedc48a82ff9e53e9be3ecb136a3d680f2df3aed2f362b9364733c8",
-      "afterReportSha256": "63924efe576ed02b1247d7902665827311cb0370a835c18edba1299b24d3757f"
+      "afterReportSha256": "70dc97e05f9b6773da5899977100d6ab60b53d2cc0973ff00ce26f30dc5d0639"
     },
     "dotnet-apps": {
       "inputSha256": "e5b514512a82a4ce023d7eff8d07876a33ec6a896e0ed420c309183863aa4289",
@@ -380,7 +380,7 @@
         "fnToTp": 0
       },
       "beforeReportSha256": "8fcf90f1b9a42ef56f2ae800491e394f0b3fadd13572d7252a844868cd45f4ec",
-      "afterReportSha256": "70fea0654ad91b8c383ef051878a00733986bd26b7d418e0fd874a97e38f9ce9"
+      "afterReportSha256": "d6da52ab09c534a8adb9d978b5fcd14c43310986a8c7102d7841b923bc23bcc4"
     }
   },
   "generated": [
@@ -1228,16 +1228,16 @@
     "accuracyScored": false
   },
   "tests": {
-    "total": 864,
-    "passed": 861,
+    "total": 1058,
+    "passed": 1055,
     "failed": 0,
     "skipped": 3,
-    "corpusPairs": 204
+    "corpusPairs": 205
   },
   "performance": {
     "beforeMs": 96735,
-    "afterMs": 96679,
-    "ratio": 0.999421098878379,
+    "afterMs": 97458,
+    "ratio": 1.0074740269809273,
     "gate": 1.5,
     "speedupClaim": false
   },

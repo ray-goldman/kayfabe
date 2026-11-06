@@ -1,4 +1,4 @@
-# Cycle 5: Rust local builder handoff
+# Cycle 5: Rust local builders and C# multiline proof hardening
 
 Part of the approved five-cycle improvement campaign. Each cycle uses fresh application, implementation and review agents; all generated apps are self-authored exposed development/regression evidence. Fresh context and a separate folder do not establish independent authorship on a shared host.
 
@@ -47,12 +47,14 @@ Each new set contains two apps with four vulnerable/safe pairs each; keys and so
 
 Full apps, answer-key cases and raw reports remain local. Only minimal scanner-owned corpus fixtures and sanitized measurement metadata are published. These gains measure the supported development cases; established results may remain unchanged.
 
-The eight new detections use one adjacent immutable builder local and one consuming chain. Initial settings, later literal resets, final backend selection and the original dangerous-setting location are tracked within that subset. Multiple owners, aliases, references, moves, escapes, reassignments, arbitrary intervening calls/effects and unsupported flow remain unresolved. Constructor and auxiliary API identity must be established; this is not general borrow/type analysis or a proof of Result identity. Physical coverage counts remain bounded and incomplete. The eight quiet safe labels receive no TN credit, and a TLS configuration finding does not establish an executed request or exploitability.
+The Rust detections use one adjacent immutable builder local and one consuming chain. Initial settings, later literal resets, final backend selection and dangerous-token locations are tracked within that subset. Multiple owners, aliases, references, moves, escapes, reassignments, arbitrary effects and unsupported flow remain unresolved. This is not general borrow/type analysis or a proof of Result identity. Rust remains incomplete, quiet safe labels receive no TN credit, and configuration findings do not establish executed requests or exploitability.
+
+The final integration review also hardened the C# multiline path introduced earlier in the campaign. Strict type, binding, query and mutation checks now cover ordinary multiline methods before direct or recursive suppression. Unsupported Unicode identifier identity and non-LF/non-CRLF single-line-comment boundaries retain warnings. The engine supplies original source only to the strict physical guard, with separate raw-token offsets; existing stripped parse/value inputs remain unchanged. Regression controls restore initially detected unsafe writes, named-type lookalikes and LINQ range bindings, including hidden writes across lexical boundaries. Two safe inferred-var SQL controls regain their original campaign-start warnings because type identity is unproved. General contextual-var inference, ordinary single-line legacy proof weaknesses, broad C# lexical normalization and compiler binding remain outside this change. All frozen benchmark/app outcomes above remain unchanged apart from the stated Rust gain.
 
 ## Validation and limits
 
-- Full exact-archive suite: 864 tests, 861 passed, 0 failed, 3 platform skips; corpus 204/204.
-- Juliet C# default scan: 96.73 s → 96.68 s (0.999×; limit 1.5×). Shared-machine single runs do not establish a speedup.
+- Full exact-archive suite: 1058 tests, 1055 passed, 0 failed, 3 platform skips; corpus 205/205.
+- Juliet C# default scan: 96.73 s → 97.46 s (1.007×; limit 1.5×). Shared-machine single runs do not establish a speedup.
 - 26 existing evaluator/policy files byte-verified unchanged. Existing frozen safe/prior sets, nine development apps, nickrulez/blesclues and 190 adversarial fixtures replayed.
 - Immutable Hermes variants replayed in both profiles, with archive/input hashes verified. Rust remains incomplete; zero findings receive no accuracy credit. Cargo inventory is not vulnerability reachability.
 - Harness production scope self-audited and all candidates manually reviewed. Fixture/test/documentation scope is explicitly separate; no complete security assessment is implied.
@@ -61,16 +63,16 @@ The eight new detections use one adjacent immutable builder local and one consum
 
 ## Frozen provenance
 
-Baseline commit: `47d0a80f7faaf21eac2e27a136fe893ee07bc397`. Measured implementation: `5c8f6f0f8ff3d8756316ec55bb96111a9da8db6e`. Subsequent evidence changes are documentation only.
+Baseline commit: `47d0a80f7faaf21eac2e27a136fe893ee07bc397`. Measured implementation: `6fd12a5cdcebd204360215a4767d55af390a5fae`. Subsequent evidence changes are documentation only.
 
 Baseline reports reuse the preceding cycle measurement at `91038abc511259a6903cd9a7b4600970c4e31d09`: its exact runtime hash matches verified main `47d0a80f7faaf21eac2e27a136fe893ee07bc397`. Original report bytes/timestamps are retained. Every new candidate reruns all seven datasets; this is not a fresh timing run of unchanged baseline code.
 
 Baseline source SHA-256: `9f25e8e0674c88294eaa20fa4860faf9c93a0789fbc98e5f0d6c0e32c2100a67`.
 
-Candidate source SHA-256: `3246c857fc825a515e349d9bb69879292ccfedf9fd6f1186ddd595aaedfb5aaa`.
+Candidate source SHA-256: `b9accd4f839b69c6aa9d6bb516024daf02e9537f21409a01f32d59970704178b`.
 
-Candidate archive SHA-256: `c6ce8dce05a0e62ad86642bfee47e4568dd9bd6eab2a21f0902e8915699dfa8f`.
+Candidate archive SHA-256: `f4ba94365053ffabdd6de66ba078b8974b64162f9e2dafb0e4cc317fcb0efbc3`.
 
-Candidate inventory SHA-256: `1ea2867e5f44cfb022ffb479ce82362b2d72d51b82f1222d2c1e8e131522a0f3`.
+Candidate inventory SHA-256: `dfddaf69eda154828c03a91cbfd46f73c4f83202f766b68bfecbcd09bd238946`.
 
 [Sanitized aggregate](benchmarks/five-cycle-5-results.json). Remaining language/control-flow gaps are retained in the scope documentation and aggregate limitations.
