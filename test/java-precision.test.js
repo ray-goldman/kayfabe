@@ -15,7 +15,7 @@ async function findings(t, source, ruleId) {
     fs.rmSync(resolved, { recursive: true, force: true });
   });
   fs.writeFileSync(path.join(root, 'Example.java'), source);
-  return (await scan(root, { includeTests: true })).findings.filter(f => f.ruleId === ruleId);
+  return (await scan(root, { includeTests: true })).findings.filter(f => !ruleId || f.ruleId === ruleId);
 }
 
 test('constant SQL in a neighboring method does not inherit request data', async (t) => {
@@ -489,5 +489,377 @@ test('repeated-u and comment-hidden Java Unicode escapes disable constant suppre
       statement.executeQuery("SELECT '" + data + "'");
     } }`;
     assert.ok((await findings(t, source, 'JAVA-SQLI-001')).length, mutation);
+  }
+});
+
+test('complete literal SQL execute calls prove arbitrary receivers without a positive sink expansion', async (t) => {
+  for (const receiver of ['sqlStatement', 'executor', 'client.session', 'statement']) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed";
+      boolean result = ${receiver}.execute("SELECT name FROM users WHERE id=" + data);
+    } }`;
+    assert.equal((await findings(t, source, 'JAVA-SQLI-002')).length, 0, receiver);
+    assert.equal((await findings(t, source, 'JAVA-SQLI-001')).length, 0, receiver);
+    const changed = source.replace('String data = "fixed";', 'String data = request.getParameter("x");');
+    // The engine deduplicates matching SQL CWEs; the existing named sink wins.
+    assert.equal((await findings(t, changed, 'JAVA-SQLI-002')).length, receiver === 'statement' ? 0 : 1, receiver);
+    assert.equal((await findings(t, changed, 'JAVA-SQLI-001')).length, receiver === 'statement' ? 1 : 0, receiver);
+  }
+});
+
+test('complete multiline execute calls prove the full SQL argument', async (t) => {
+  const source = `class Example { String data = request.getParameter("x"); void run() {
+    String data = "fixed";
+    boolean result = sqlStatement.execute("SELECT name FROM users WHERE id=" + data +
+      " AND active=1");
+  } }`;
+  assert.equal((await findings(t, source, 'JAVA-SQLI-002')).length, 0);
+});
+
+test('every execute call and SQL fragment in the window needs a complete safe proof', async (t) => {
+  for (const call of [
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data + input);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data, unknown);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data, input);',
+    'sqlStatement.execute(wrap("SELECT name FROM users WHERE id=" + data, input));',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data, nested(input));',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data); other.execute("SELECT name FROM users WHERE id=" + input);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data, "SELECT name FROM users WHERE id=" + input);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data); String other = "SELECT name FROM users WHERE id=" + input;',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data); other.execute(input);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data;',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data,);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data]);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed"; String input = request.getParameter("x");
+      ${call}
+    } }`;
+    assert.ok((await findings(t, source, 'JAVA-SQLI-002')).length, call);
+  }
+});
+
+test('safe SQL fragments in separate execute calls and standalone assignments stay provable', async (t) => {
+  for (const statement of [
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data); other.execute("SELECT name FROM users WHERE id=" + data);',
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data, "SELECT name FROM users WHERE id=" + data);',
+    'String sql = "SELECT name FROM users WHERE id=" + data;',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed";
+      ${statement}
+    } }`;
+    assert.equal((await findings(t, source, 'JAVA-SQLI-002')).length, 0, statement);
+  }
+});
+
+test('later SQL writes and array mutation invalidate execute call proofs', async (t) => {
+  for (const body of [
+    'String data = "fixed"; while (condition) { sqlStatement.execute("SELECT name FROM users WHERE id=" + data); data = request.getParameter("x"); }',
+    'String[] data = "a-b".split("-"); sqlStatement.execute("SELECT name FROM users WHERE id=" + data[0]); data[0] = request.getParameter("x");',
+    'String[] data = "a-b".split("-"); sqlStatement.execute("SELECT name FROM users WHERE id=" + data[0]); mutate(data);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() { ${body} } }`;
+    assert.ok((await findings(t, source, 'JAVA-SQLI-002')).length, body);
+  }
+});
+
+test('exact class literal metadata permits constant SQL without proving changed SQL input', async (t) => {
+  for (const metadata of ['Long.class', 'java.lang.Long.class', 'String[].class', 'int[][].class', 'boolean.class', 'void.class', 'Outer.Inner.class', 'Long . class']) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed";
+      jdbcTemplate.queryForObject("SELECT name FROM users WHERE id=" + data, ${metadata});
+    } }`;
+    assert.equal((await findings(t, source, 'JAVA-SQLI-001')).length, 0, metadata);
+    assert.equal((await findings(t, source, 'JAVA-SQLI-002')).length, 0, metadata);
+    const changed = source.replace('String data = "fixed";', 'String data = request.getParameter("x");');
+    assert.equal((await findings(t, changed, 'JAVA-SQLI-001')).length, 1, metadata);
+    assert.equal((await findings(t, changed.replace('jdbcTemplate.queryForObject', 'sqlStatement.execute'), 'JAVA-SQLI-002')).length, 1, metadata);
+  }
+});
+
+test('class literal metadata never becomes a general constant or SQL text proof', async (t) => {
+  for (const statement of [
+    'sqlStatement.execute("SELECT name FROM users WHERE id=" + data + Long.class, Long.class);',
+    'String sql = "SELECT name FROM users WHERE id=" + data + Long.class;',
+    'String sql = "SELECT name FROM users WHERE id=" + data; sqlStatement.execute(Long.class, sql);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed";
+      ${statement}
+    } }`;
+    assert.ok((await findings(t, source, 'JAVA-SQLI-002')).length, statement);
+  }
+  const command = `class Example { void run() { Runtime.getRuntime().exec("echo " + Long.class); } }`;
+  assert.equal((await findings(t, command, 'JAVA-CMDI-001')).length, 1);
+});
+
+test('metadata lookalikes and side effects cannot prove SQL assembly arguments', async (t) => {
+  for (const metadata of [
+    'Long.class.getName()', 'Long.class.getClass()', 'data.getClass()', 'getClass()',
+    'Class.forName(input)', 'new Object()', 'metadata', 'Long.class + input',
+    'choose(Long.class)', 'condition ? Long.class : input', '(metadata = Long.class)',
+    'new Class[] { Long.class }', 'void[].class', 'Long.class.field',
+    'Long..class', 'Long[0].class', 'int.field.class', 'new.class',
+    'Long.class++', 'Lo ng.class', 'Long.class[0]',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed"; String input = request.getParameter("x");
+      sqlStatement.execute("SELECT name FROM users WHERE id=" + data, ${metadata});
+    } }`;
+    assert.equal((await findings(t, source, 'JAVA-SQLI-002')).length, 1, metadata);
+  }
+});
+
+test('real nested declarations and anonymous classes still disable local SQL proof', async (t) => {
+  for (const declaration of [
+    'class Local {}', 'interface Local {}', 'record Local(int value) {}',
+    'enum Local { VALUE }', 'Object object = new Object() {};',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      ${declaration}
+      String data = "fixed";
+      jdbcTemplate.queryForObject("SELECT name FROM users WHERE id=" + data, Long.class);
+    } }`;
+    assert.equal((await findings(t, source, 'JAVA-SQLI-001')).length, 1, declaration);
+    assert.equal((await findings(t, source.replace('jdbcTemplate.queryForObject', 'sqlStatement.execute'), 'JAVA-SQLI-002')).length, 1, declaration);
+  }
+});
+
+test('execute call proof rejects calls beyond the existing expression and window bounds', async (t) => {
+  for (const tail of [
+    '\n'.repeat(7) + ');',
+    `, "${'x'.repeat(1800)}"\n, "${'y'.repeat(1800)}"\n, "${'z'.repeat(800)}");`,
+    ', ' + '('.repeat(65) + '1' + ')'.repeat(65) + ');',
+  ]) {
+    const source = `class Example { String data = request.getParameter("x"); void run() {
+      String data = "fixed";
+      sqlStatement.execute("SELECT name FROM users WHERE id=" + data${tail}
+    } }`;
+    assert.ok((await findings(t, source, 'JAVA-SQLI-002')).length, tail.length);
+  }
+});
+
+test('an inner execute result plus request syntax retains the complete request-to-JDBC warning', async (t) => {
+  const hits = await findings(t, `class Example {
+  interface Request { String getParameter(String name); }
+  static class Formatter {
+    String execute(String prefix) { return prefix; }
+  }
+  static class Channel {
+    java.sql.Connection connection;
+    void send(String sql) throws java.sql.SQLException {
+      connection.createStatement().execute(sql);
+    }
+  }
+  Formatter formatter = new Formatter();
+  void run(Request request, Channel channel) throws java.sql.SQLException {
+    String data = "fixed";
+    String input = request.getParameter("name");
+    String query = formatter.execute("SELECT name FROM users WHERE name='" + data) + input + "'";
+    channel.send(query);
+  }
+}`);
+  assert.deepEqual(hits.map(({ ruleId, line }) => ({ ruleId, line })), [
+    { ruleId: 'JAVA-SQLI-002', line: 16 },
+  ]);
+});
+
+for (const [name, context] of [
+  ['assignment concatenation', inner => `String query = ${inner} + input; channel.send(query);`],
+  ['return concatenation', inner => `return ${inner} + input;`],
+  ['outer-call concatenation', inner => `channel.send(${inner} + input);`],
+  ['outer-call dynamic sibling', inner => `channel.send(${inner}, input);`],
+  ['unknown wrapper', inner => `String query = decorate(${inner}, input); channel.send(query);`],
+  ['receiver concat', inner => `String query = ${inner}.concat(input); channel.send(query);`],
+  ['prefix concatenation', inner => `String query = input + ${inner}; channel.send(query);`],
+]) {
+  test(`SQL call argument proofs cannot cover enclosing ${name}`, async (t) => {
+    // Existing sink names gain the same context check: .class must not expose
+    // the former call-span assumption through the declaration-bailout change.
+    for (const call of [
+      'formatter.execute("SELECT name FROM users WHERE name=" + data)',
+      'formatter.execute("SELECT name FROM users WHERE name=" + data, Long.class)',
+      'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, Long.class)',
+    ]) {
+      const source = `class Example {
+        String data = request.getParameter("outer");
+        ${name === 'return concatenation' ? 'String' : 'void'} run(HttpServletRequest request) {
+          String data = "fixed";
+          String input = request.getParameter("name");
+          ${context(call)}
+        }
+      }`;
+      assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })), [
+        { ruleId: 'JAVA-SQLI-002', line: 6 },
+      ], call);
+    }
+  });
+}
+
+test('complete SQL calls and direct result assignments retain their independent proof', async (t) => {
+  for (const statement of [
+    'formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'String query = formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'final String query = formatter.execute("SELECT name FROM users WHERE name=" + data, Long.class);',
+    'query = formatter.execute("SELECT name FROM users WHERE name=" + data);',
+    'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, Long.class);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed";
+      ${statement}
+    } }`;
+    assert.deepEqual(await findings(t, source), [], statement);
+  }
+});
+
+for (const [name, statement] of [
+  ['return', 'return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data);'],
+  ['outer wrapper', 'consume(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data));'],
+]) {
+  test(`baseline local-constant SQL ${name} remains quiet`, async t => {
+    const source = `class Example {
+      String data = request.getParameter("outer");
+      String run() {
+        String data = "fixed";
+        ${statement}
+      }
+    }`;
+    assert.deepEqual(await findings(t, source), []);
+  });
+}
+
+test('only exact original SQL sink matches regain local wrapper coverage', async t => {
+  for (const [receiver, legacy] of [
+    ['jdbcTemplate.queryForObject', true], ['statement.execute', true],
+    ['statementProxy.execute', true], ['ps.execute', true], ['this.statement.execute', true],
+    ['jdbcTemplate.queryForObject ', true], ['formatter.execute', false],
+    ['statement .execute', false], ['statement. execute', false], ['statement . execute', false],
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer");
+      String run() {
+        String data = "fixed";
+        return ${receiver}("SELECT name FROM users WHERE name=" + data);
+      }
+    }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      legacy ? [] : [{ ruleId: 'JAVA-SQLI-002', line: 4 }], receiver);
+  }
+});
+
+test('legacy local coverage preserves its inherited enclosing-context limitation', async t => {
+  // These are baseline compatibility cases, including inherited unsafe quiet
+  // cases. Safe call arguments establish no returned-value fact (tested below).
+  for (const receiver of ['jdbcTemplate.queryForObject', 'statement.execute']) {
+    const call = `${receiver}("SELECT name FROM users WHERE name=" + data)`;
+    for (const statement of [
+      `return ${call};`, `return (${call});`, `consume(${call});`,
+      `String query = ${call} + input; channel.send(query);`,
+      `return ${call} + input;`, `channel.send(${call} + input);`,
+      `channel.send(${call}, input);`, `String query = decorate(${call}, input); channel.send(query);`,
+      `String query = ${call}.concat(input); channel.send(query);`,
+      `String query = input + ${call}; channel.send(query);`,
+    ]) {
+      const source = `class Example { String data = request.getParameter("outer");
+        String run() {
+          String data = "fixed"; String input = request.getParameter("x");
+          ${statement}
+        }
+      }`;
+      assert.deepEqual(await findings(t, source), [], statement);
+      for (const [before, after] of [
+        ['Object marker = Long.class;', ''], ['', 'Object marker = Long.class;'],
+        ['{ Object marker = Long.class; }', ''],
+      ]) {
+        const guarded = source.replace('String data = "fixed";', `${before} String data = "fixed";`)
+          .replace(statement, `${statement} ${after}`);
+        assert.deepEqual((await findings(t, guarded)).map(({ ruleId, line }) => ({ ruleId, line })),
+          [{ ruleId: 'JAVA-SQLI-002', line: 4 }], `${before} / ${after} / ${statement}`);
+      }
+    }
+  }
+});
+
+test('class literal text and class literals in other methods do not disable local compatibility', async t => {
+  const source = `class Example { String data = request.getParameter("outer");
+    void other() { Object marker = Long.class; }
+    String run() {
+      String text = "Long.class"; String data = "fixed";
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data);
+    }
+  }`;
+  assert.deepEqual(await findings(t, source), []);
+});
+
+test('local wrapper proofs retain branches, typed values, aliases and read-only split elements', async t => {
+  for (const setup of [
+    'String seed = "fixed"; String data = (seed) + "suffix";',
+    'int flag = 1; String data; if (flag == 1) data = "fixed"; else data = request.getParameter("x");',
+    'String[] names = "a-b".split("-"); String data = names[0];',
+    'int n = 1; boolean yes = true; char c = \'a\'; String data = "fixed" + n + yes + c;',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); String run() {
+      ${setup}
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data);
+    } }`;
+    assert.deepEqual(await findings(t, source), [], setup);
+  }
+});
+
+test('local wrapper coverage checks every argument, later write and array escape', async t => {
+  for (const [setup, argument, after, ruleId] of [
+    ['String data = "fixed";', 'data', 'data = request.getParameter("x");', 'JAVA-SQLI-001'],
+    ['String[] data = "a-b".split("-");', 'data[0]', 'data[0] = request.getParameter("x");', 'JAVA-SQLI-001'],
+    ['String[] data = "a-b".split("-");', 'data[0]', 'mutate(data);', 'JAVA-SQLI-001'],
+    ['String[] data = "a-b".split("-"); String[] alias = data;', 'data[0]', '', 'JAVA-SQLI-001'],
+    ['String data = "fixed";', 'data, request.getParameter("x")', '', 'JAVA-SQLI-002'],
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      ${setup}
+      consume(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + ${argument})); ${after}
+    } }`;
+    const hits = await findings(t, source);
+    assert.deepEqual(hits.map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId, line: 3 }], `${setup} / ${after}`);
+  }
+});
+
+test('metadata arguments never use the local wrapper exception', async t => {
+  for (const metadata of ['Long.class', 'Long.class.getName()', '(Long.class)', 'choose(Long.class)', 'metadata']) {
+    const source = `class Example { String data = request.getParameter("outer"); String run() {
+      String data = "fixed";
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, ${metadata});
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], metadata);
+  }
+});
+
+test('legacy call span coverage does not export a returned SQL or String fact', async t => {
+  const source = `class Example { String data = request.getParameter("outer");
+    private String selected() {
+      String data = "fixed";
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data);
+    }
+    void run() {
+      String result = selected();
+      statement.executeQuery("SELECT name FROM users WHERE name=" + result);
+    }
+  }`;
+  assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+    [{ ruleId: 'JAVA-SQLI-001', line: 8 }]);
+});
+
+test('a legacy call never exempts a new call or a dynamic neighboring assembly in the same window', async t => {
+  for (const statement of [
+    'consume(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data)); consume(formatter.execute("SELECT name FROM users WHERE name=" + data));',
+    'consume(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data)); String query = "SELECT name FROM users WHERE name=" + input;',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed"; String input = request.getParameter("x");
+      ${statement}
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], statement);
   }
 });
