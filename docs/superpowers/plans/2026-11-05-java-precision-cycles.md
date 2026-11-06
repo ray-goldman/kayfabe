@@ -62,11 +62,33 @@ Run focused RED then GREEN, all four Java test files (java-precision, java-helpe
 
 **Pre-production refinement:** Existing javaOutputFilter can consume default constant facts, so the new route also requires a bounded effect-free local helper body. Parse every statement with brace-scoped scalar bindings; unknown calls, implicit opaque-reference conversions, member/nonlocal writes, callbacks, allocations, loops, exceptions and unrecognized syntax remain unknown. Parameters/reference values are not scalar locals. No dead-arm effect skipping or widened old supported path. Hidden response-write, expired-scope write and implicit-reference toString callback twins have saved RED/GREEN evidence. Exact marker annotations before ordinary caller modifiers are allowed; post-modifier/type-use or argument annotations remain unknown.
 
-## Task 3: evidence-selected owner or alternative proof
+## Task 3: class annotation literal metadata
 
-- [ ] After cycle2 merge, inspect exact residual original-policy cases and write a short decision/precise implementation brief before code. Current candidate is an exactly fresh same-file private member-class receiver, with bounded owner/index parsing, independent returns, all receiver writes/aliases/escapes and overload/override/capture checks. Alternative chosen only from measured code evidence.
-- [ ] Specify exact files/interfaces and owned positive/negative tests in this task before extracting the brief. No placeholder or inferred unknown-owner suppression is permitted.
-- [ ] Fresh implementer uses RED/GREEN, corpus and task review; root executes Task5 through PR/CI/merge. No-gain outcomes trigger static diagnosis and revised safe target, not a test-only claimed cycle.
+**Reassessment:** The accepted C2 result removes19JavaJuliet FPs with no true-positive loss/new FP, while OWASP retains286FP. Static rereading of actual remaining original-policy labels confirms class annotations with String-literal arguments block otherwise local independent SQL helpers. Existing formatter-array cases have an additional HTML capability boundary. Choose this smaller class-header proof before broader owner/map work. Candidate counts are hypotheses, never a promised gain.
+
+**Files/interfaces:** Modify src/java-independent-return.js only for runtime, existing Java test files and new corpus/java-class-annotation-returns/{case.json,vuln/Example.java,fixed/Example.java}. Preserve independentReturnEligible signature, summary schemas and all consumers. No other runtime file, rule, package, benchmark or policy change.
+
+### Bounded class annotation arguments
+
+Modify only class-declaration annotation prefixes in src/java-independent-return.js, existing Java tests and a new paired corpus/java-class-annotation-returns case. No summary/fact/engine/rule API changes. Preserve the C2 fix for uncertain String conversions and every gate below annotation parsing.
+
+Support existing qualified annotation names without annotation-name allowlists. Keep existing markers, optionally empty parentheses, one default ordinary String literal, or comma-separated unique named String literal elements (identifier = literal). Do not mix default/named values. Deliberately omit char/numeric/bool values because current evidence needs String literals only. Reject identifier/constants, null, calls/expressions, arrays/braced values, nested annotations, class literals, type arguments and duplicate/mixed forms. Unknown annotation shapes remain unknown.
+
+Read literal-bearing comment-stripped source aligned with the mask; masked whitespace alone cannot establish a literal. Explicit typed literal tokens must consume quoted delimiter-looking text and escapes safely. Admit a documented ordinary Java String escape subset only; reject unterminated quotes, unescaped CR/LF, invalid/truncated escapes, Unicode preprocessing/text blocks and anything outside subset. Do not let '<', '>', '{', '}', parens, annotation-looking text or escaped quotes inside a literal affect class/body/type boundaries. No greedy annotation erasure.
+
+Keep current 4000-character header cap, 256-token cap, 16 annotation cap and shared work accounting; no limit increase. Whole header must be consumed. Restrict extension to class prefixes with explicit class-only parser option or separate entry: shared caller modifiers must remain marker-only, and annotations after modifiers/type-use remain unknown. Once class metadata is read, unchanged class name/modifier/extends/implements/generic/owner/caller/arity/type/effect/body/return gates still apply. Metadata conveys no safe value, target identity or purity fact.
+
+### Owned tests before code
+
+Add saved contemporary RED for a complete SQL call via the existing private opaque-reference helper under an arbitrary class annotation with literal arguments. Include safe local independent return versus tainted return, default/named/multiple values/qualified annotation/ordinary marker, @Override caller. Positive original-only complete sink shape must be supported while wrappers/outer concatenations stay warned.
+
+Negative pairs: generic caller/class and inherited-overload trap, quote/brace/angle/syntax text within literals, valid admitted escaped quote/backslash versus malformed/truncated escapes/quotes, calls/identifiers/nested/array annotations, annotation-array brace before class body, duplicates/mixed/default args, extra/trailing tokens, budgets and huge literals, placement/type-use/caller annotation-with-args. Preserve C2 uncertain-String callback negative, hidden output effects, newfact isolation/localOnly and all C1 metadata controls. No target app compilation/execution.
+
+Run focused RED/GREEN and all four Java files plus corpus; save raw stdout/stderr/exits/hash/time and preserve original208 files/cases. Root owns exactcode two source reviews, all seven fresh unchanged-key benchmarks versus predecessor and initial, all compat/selfaudit/evidenceprivacy, PR/CI/merge. No benchmark tuning/name exceptions or project guard waivers.
+
+JLS9.7.1 reference: https://docs.oracle.com/javase/specs/jls/se25/html/jls-9.html#jls-9.7.1 . This design implements a deliberately narrower subset.
+
+**Evidence and handoff:** Save contemporary focused RED before production edits and all later raw stdout/stderr/exit/time/hash files in this plan SDD. Unsupported syntax parser negatives must establish proof rejection; scanner-negative assertions need genuine baseline candidates and quiet positive twins rather than vacuous unsupported fixtures. Cover underlying return input/hidden effects/uncertainString conversion/generic overload trap before asserting any annotation-only benefit. Keep original208corpus bytes; add exactly the owned pair. Run all four Java files plus corpus on final source, diffcheck/selfreview, commit ownedsource/test/corpus only, write task-3-report.md beside extractedbrief with commands/results/logpaths/hash/commit/limits. No subagents, target execution, benchmark runs, pushes or PR. Root owns two source reviews, frozen fullsuite/all7compat/selfaudit/privacy and PR/CI/merge.
 
 ## Task 4: evidence-selected ordered-state or alternative proof
 
