@@ -241,9 +241,27 @@ test('independent purity proof resolves block locals without borrowing an expire
 });
 
 test('independent purity proof rejects implicit callbacks from opaque reference string conversion', async t => {
-  assert.deepEqual(await findings(t, independentSource('String ignored = "prefix" + input; return "fixed";')), []);
+  assert.deepEqual(await findings(t, independentSource('String ignored = "prefix" + "literal"; return "fixed";')), []);
   assert.ok((await findings(t, independentSource('String ignored = "prefix" + request; return "fixed";'))).length,
     'opaque request.toString can mutate output even when the returned literal is fixed');
+});
+
+test('independent String reference effects propagate through parentheses aliases and conditional expressions', async t => {
+  for (const body of [
+    'boolean ignored = ("prefix" + input) == ""; return null;',
+    'boolean ignored = ("prefix" + ((input))) == ""; return null;',
+    'String alias = input; boolean ignored = ("prefix" + alias) == ""; return null;',
+    'String alias = input; alias = null; boolean ignored = ("prefix" + alias) == ""; return null;',
+    'boolean ignored = ("prefix" + (true ? input : null)) == ""; return null;',
+    'boolean ignored = ("prefix" + (input == null ? null : input)) == ""; return null;',
+    'if (false) { boolean ignored = ("prefix" + input) == ""; } return null;',
+  ]) assert.ok((await findings(t, independentSource(body))).length, body);
+  for (const body of [
+    'String alias = input; boolean ignored = alias == input; return null;',
+    'boolean ignored = ("prefix" + (input == null)) == ""; return null;',
+    'String answer = "prefix" + "literal"; return answer;',
+    'String answer = null; return answer;',
+  ]) assert.deepEqual(await findings(t, independentSource(body)), [], body);
 });
 
 test('independent helper facts keep exact empty metadata and populated-array rejection', async t => {

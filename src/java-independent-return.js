@@ -146,7 +146,8 @@ function localBody(index, method, budget) {
   if (parameters.size !== method.parameters.length || method.parameters.some(p => !identifier(p.name))) return false;
   const scopes = [parameters];
   const bound = name => scopes.some(scope => scope.has(name));
-  const scalar = name => supportedTypes.has(scopes.findLast(scope => scope.has(name))?.get(name));
+  const bindingType = name => scopes.findLast(scope => scope.has(name))?.get(name);
+  const scalar = name => supportedTypes.has(bindingType(name));
   let locals = 0;
   const precedence = new Map([['||', 1], ['&&', 2], ['|', 3], ['^', 4], ['&', 5],
     ['==', 6], ['!=', 6], ['<', 7], ['>', 7], ['<=', 7], ['>=', 7],
@@ -156,17 +157,35 @@ function localBody(index, method, budget) {
   function expression(min = 0, depth = 0) {
     if (--budget.left < 0 || depth >= 64) return false;
     const value = tokens[at++];
+    let reference = false;
     if (['!', '~', '+', '-'].includes(value)) {
-      if (!expression(11, depth + 1)) return false;
+      const operand = expression(11, depth + 1);
+      if (!operand || operand.reference) return false;
     } else if (value === '(') {
-      if (!expression(0, depth + 1) || !take(')')) return false;
-    } else if (!(scalar(value) || /^(?:"|'|\d)/.test(value || '') || ['true', 'false', 'null'].includes(value))) return false;
+      const inner = expression(0, depth + 1);
+      if (!inner || !take(')')) return false;
+      reference = inner.reference;
+    } else if (scalar(value)) {
+      // The spelling String may denote a user type. Copying/comparing its
+      // reference is effect-free; implicit conversion may call user toString.
+      // Keep the declared uncertainty even after a literal/null assignment.
+      reference = bindingType(value) === 'String';
+    } else if (!/^(?:"|'|\d)/.test(value || '') && !['true', 'false', 'null'].includes(value)) return false;
     while (precedence.has(tokens[at]) && precedence.get(tokens[at]) >= min) {
-      const power = precedence.get(tokens[at++]);
-      if (!expression(power + 1, depth + 1)) return false;
+      const operator = tokens[at++], power = precedence.get(operator);
+      const right = expression(power + 1, depth + 1);
+      if (!right || (reference || right.reference) && !['==', '!='].includes(operator)) return false;
+      reference = false; // Equality compares references without conversion.
     }
-    if (min === 0 && take('?') && (!expression(0, depth + 1) || !take(':') || !expression(0, depth + 1))) return false;
-    return true;
+    if (min === 0 && take('?')) {
+      if (reference) return false;
+      const yes = expression(0, depth + 1);
+      if (!yes || !take(':')) return false;
+      const no = expression(0, depth + 1);
+      if (!no) return false;
+      reference = yes.reference || no.reference;
+    }
+    return { reference };
   }
   function statement(depth = 0, inSwitch = false, declarations = true) {
     if (--budget.left < 0 || depth >= 64) return false;
@@ -178,11 +197,15 @@ function localBody(index, method, budget) {
       return !!take('}');
     }
     if (take('if')) {
-      if (!take('(') || !expression() || !take(')') || !statement(depth + 1, inSwitch, false)) return false;
+      if (!take('(')) return false;
+      const condition = expression();
+      if (!condition || condition.reference || !take(')') || !statement(depth + 1, inSwitch, false)) return false;
       return !take('else') || statement(depth + 1, inSwitch, false);
     }
     if (take('switch')) {
-      if (!take('(') || !expression() || !take(')') || !take('{')) return false;
+      if (!take('(')) return false;
+      const selector = expression();
+      if (!selector || selector.reference || !take(')') || !take('{')) return false;
       scopes.push(new Map());
       while (at < tokens.length && tokens[at] !== '}') {
         if (take('case')) { if (!expression() || !take(':')) return false; }
