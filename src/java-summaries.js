@@ -1,6 +1,7 @@
 'use strict';
 const { indexJavaFile, parseCall, argumentsOf, shadowsType } = require('./java-methods');
 const { javaEncodingFact } = require('./java-sanitizers');
+const { independentReturnEligible } = require('./java-independent-return');
 const unknown = () => ({ known: false, dependencies: [], encodings: [], evidence: [] });
 const independent = () => ({ known: true, dependencies: [], encodings: [], evidence: [] });
 const encoded = dependencies => ({ known: true, dependencies, external: true, encodings: ['html-text'], evidence: [] });
@@ -49,6 +50,15 @@ function createJavaSummaries({ file, raw, code, project }) {
     state.budget.methods.add(method.id);
     if (state.budget.methods.size > 32 || !method.returns.length || method.type !== 'String') return unknown();
     const parameters = new Map();
+    if (method.parameters.some(p => !['String', 'int', 'boolean', 'char', 'long'].includes(p.type))) {
+      if (state.mode === 'html' || !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
+      // No caller facts cross this boundary. Each return receives a fresh
+      // context but shares the existing work/method budget without replenishment.
+      const safe = method.returns.every(r => target.filter.valueAt(r.expression, r.offset, {
+        localOnly: true, mode: 'constant', budget: state.budget, stack: [...state.stack, method.id],
+      }));
+      return safe ? independent() : unknown();
+    }
     for (let i = 0; i < method.parameters.length; i++) {
       const param = method.parameters[i];
       if (!['String', 'int', 'boolean', 'char', 'long'].includes(param.type)) return unknown();

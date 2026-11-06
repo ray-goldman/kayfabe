@@ -8,6 +8,21 @@ const { scan } = require('../src/engine');
 const escape = value => `org.springframework.web.util.HtmlUtils.htmlEscape(${value})`;
 const print = value => `response.getWriter().print(${value});`;
 
+test('independent opaque-reference helpers cannot hide HTML stream effects or claim encoding', async t => {
+  const safe = 'private String choose(HttpServletRequest request, String input) { return "fixed"; }';
+  assert.deepEqual(await findings(t, `String clean = choose(request, input); ${print('clean')}`, safe), []);
+  for (const method of [
+    'private String choose(HttpServletRequest request, String input) { request.startAsync().getResponse().getWriter().write("<script>"); return "fixed"; }',
+    'private String choose(HttpServletRequest request, String input) { field = request; return "fixed"; }',
+  ]) assert.ok((await findings(t, `String clean = choose(request, input); ${print('clean')}`, method)).length, method);
+  assert.ok((await findings(t, `String clean = choose(request, input); ${print('clean')}\n${print(escape('input'))}`,
+    'private String choose(HttpServletRequest request, String input) { return "<script>"; }')).length,
+  'fixed markup is not an encoding fact for later dynamic output');
+  // Existing supported-only encoder helpers still use their established route.
+  assert.deepEqual(await findings(t, `String clean = encode(input); ${print('clean')}`,
+    `private String encode(String input) { return ${escape('input')}; }`), []);
+});
+
 async function findings(t, body, methods = '', extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'appsec-java-sanitizers-'));
   t.after(() => {
