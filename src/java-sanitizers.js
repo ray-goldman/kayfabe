@@ -2,6 +2,7 @@
 const { parseCall, shadowsType, argumentsOf } = require('./java-methods');
 const { formattingArray } = require('./java-format-arrays');
 const { independentFormat } = require('./java-independent-format');
+const { independentCharCopy } = require('./java-independent-char-copy');
 
 const HTML_ENCODERS = new Map([
   ['org.springframework.web.util.HtmlUtils', new Set(['htmlEscape'])],
@@ -222,8 +223,11 @@ function javaOutputFilter({ code, filter, project }) {
       if (args.length && args.every(arg => filter.valueAt(arg, position))) { found = true; continue; }
       const output = contextBefore(method, position);
       if (!output) return false;
-      if (htmlContext(output.text) === 'html-text' && independentFormat({ index, filter, project, call,
-        windowStart: offsets[line], windowEnd: offsets[line] + window.length })) { found = true; continue; }
+      if (htmlContext(output.text) === 'html-text' &&
+          (independentFormat({ index, filter, project, call, windowStart: offsets[line], windowEnd: offsets[line] + window.length }) ||
+           independentCharCopy({ index, filter, project, call, windowStart: offsets[line], windowEnd: offsets[line] + window.length }))) {
+        found = true; continue;
+      }
       if (!render(call, output)) return false;
       found = true;
     }
