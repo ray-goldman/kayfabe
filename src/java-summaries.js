@@ -33,6 +33,14 @@ function createJavaSummaries({ file, raw, code, project }) {
     if (target.index !== index && !method.static) return null;
     return { target, method };
   }
+  function isolatedReturnFact(target, method, state) {
+    // Every return has a fresh local-only context; only existing work/method
+    // state and the extended stack cross the boundary, never caller facts.
+    const safe = method.returns.every(r => target.filter.valueAt(r.expression, r.offset, {
+      localOnly: true, mode: 'constant', budget: state.budget, stack: [...state.stack, method.id],
+    }));
+    return safe ? independent() : unknown();
+  }
   function callFact({ expression, position, prove, context }) {
     const call = parseCall(expression);
     if (!call) return unknown();
@@ -47,10 +55,7 @@ function createJavaSummaries({ file, raw, code, project }) {
       state.budget.methods.add(method.id);
       if (state.budget.methods.size > 32 || !method.returns.length || method.type !== 'String' ||
           !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
-      const safe = method.returns.every(r => target.filter.valueAt(r.expression, r.offset, {
-        localOnly: true, mode: 'constant', budget: state.budget, stack: [...state.stack, method.id],
-      }));
-      return safe ? independent() : unknown();
+      return isolatedReturnFact(target, method, state);
     }
     const encoder = javaEncodingFact({ index, project, expression,
       argumentFacts: () => call.args.map(arg => prove(arg, 'constant') ? independent() : unknown()) });
@@ -68,12 +73,7 @@ function createJavaSummaries({ file, raw, code, project }) {
     const parameters = new Map();
     if (method.parameters.some(p => !['String', 'int', 'boolean', 'char', 'long'].includes(p.type))) {
       if (state.mode === 'html' || !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
-      // No caller facts cross this boundary. Each return receives a fresh
-      // context but shares the existing work/method budget without replenishment.
-      const safe = method.returns.every(r => target.filter.valueAt(r.expression, r.offset, {
-        localOnly: true, mode: 'constant', budget: state.budget, stack: [...state.stack, method.id],
-      }));
-      return safe ? independent() : unknown();
+      return isolatedReturnFact(target, method, state);
     }
     for (let i = 0; i < method.parameters.length; i++) {
       const param = method.parameters[i];

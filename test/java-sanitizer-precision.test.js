@@ -10,6 +10,72 @@ const print = value => `response.getWriter().print(${value});`;
 
 const independentHelper = 'private String choose(HttpServletRequest request, String input) { return "fixed"; }';
 const independentPrintf = (format = '"%s"', locale = '') => `response.getWriter().printf(${locale}${format}, parts);`;
+const explicitServletImports = 'import javax.servlet.http.HttpServlet; import javax.servlet.http.HttpServletRequest; import javax.servlet.http.HttpServletResponse;';
+const independentServletSource = (body, methods) => `${explicitServletImports}
+  class Example extends HttpServlet {
+    ${methods}
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+      String input = request.getParameter("value");
+      ${body}
+    }
+  }`;
+
+test('independent owner fix1 Locale requires a known leading owner without import uncertainty', async t => {
+  const { buildJavaProjectIndex } = require('../src/java-project');
+  const { independentFormat } = require('../src/java-independent-format');
+  const { argumentsOf } = require('../src/java-methods');
+  const { stripComments } = require('../src/languages');
+  const source = imports => `${explicitServletImports}
+${imports}
+class Example extends HttpServlet {
+  ${independentHelper}
+  protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+    String input = request.getParameter("x");
+    String selected = choose(request, input);
+    Object[] parts = {selected};
+    response.getWriter().printf(java.util.Locale.US, "%s", parts);
+  }
+}`;
+  assert.deepEqual(await findings(t, '', '', { 'Example.java': source('') }), [], 'known owner positive');
+  assert.deepEqual(await findings(t, '', '', { 'Example.java': source('import harmless /* gap */ . Name;') }), [], 'ordinary normalized type import');
+  const cases = [
+    ['source wildcard', 'import evil.*;', { 'evil/java.java': `package evil; import java.util.Locale; public class java {
+      public static javax.servlet.http.HttpServletRequest request;
+      public static Namespace util = new Namespace();
+      public static class Namespace { public Carrier Locale = new Carrier(); }
+      public static class Carrier {
+        public Locale US = initialize();
+        private Locale initialize() {
+          request.startAsync().getResponse().getWriter().write(request.getParameter("x"));
+          return Locale.US;
+        }
+      }
+    }` }],
+    ['absent wildcard', 'import missing.*;', {}],
+    ['static root field', 'import static evil.Names.java;', {}],
+    ['static wildcard', 'import static missing.Names.*;', {}],
+    ['explicit root type', 'import evil.java;', {}],
+    ['spaced explicit root', 'import evil . java;', {}],
+    ['comment explicit root', 'import evil /* gap */ . /* gap */ java;', {}],
+    ['spaced wildcard', 'import missing /* gap */ . *;', {}],
+    ['unsupported import grammar', 'import evil..java;', {}],
+    ['same package source', '', { 'java.java': 'public class java { static Object util = callback(); }' }],
+  ];
+  for (const [name, imports, extra] of cases) await t.test(name, async t => {
+    const raw = source(imports), files = { ...extra, 'Example.java': raw };
+    const project = buildJavaProjectIndex(Object.entries(files).map(([file, raw]) => ({ file, raw, code: stripComments(raw, 'java') })));
+    const filter = project.byFile.get('Example.java').filter, code = filter.index.code;
+    const position = code.indexOf('response.getWriter()'), end = code.indexOf(';', position);
+    const call = { kind: 'printf', position, end,
+      args: argumentsOf(code.slice(code.indexOf('printf(', position) + 7, end - 1)) };
+    const strict = independentFormat({ index: filter.index, filter, project, call, windowStart: position, windowEnd: end + 1 });
+    const control = await findings(t, '', '', { ...extra, 'Example.java': raw.replace('return "fixed";', 'return input;') });
+    assert.ok(control.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-XSS-001' && hit.line === 9), 'tainted-return candidate twin');
+    const hits = await findings(t, '', '', files);
+    assert.equal(strict, false, 'strict checker: ' + name);
+    assert.ok(hits.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-XSS-001' && hit.line === 9), 'exact current printf: ' + name);
+  });
+});
 
 function outputProof(body, helper = 'private String choose(Request request, String input) { return "fixed"; }') {
   const { constantSinkFilter } = require('../src/java-constants');
@@ -153,10 +219,13 @@ test('independent printf admits only pure opaque scalar carriers in the current 
     'private String choose(HttpServletRequest request, String input) { String answer; if (true) answer = "fixed"; else answer = input; return answer; }',
     'private String choose(HttpServletRequest request, String input) { return true ? "fixed" : input; }']) {
     for (const locale of ['', 'java.util.Locale.US, ']) {
-      assert.deepEqual(await findings(t, `String selected = choose(request, input);
+      const body = `String selected = choose(request, input);
 Object[] parts = {selected};
 
-        ${independentPrintf('"%s"', locale)}`, helper), [], helper + locale);
+        ${independentPrintf('"%s"', locale)}`;
+      const hits = locale ? await findings(t, '', '', { 'Example.java': independentServletSource(body, helper) }) :
+        await findings(t, body, helper);
+      assert.deepEqual(hits, [], helper + locale);
     }
   }
   for (const format of ['"%s %2$s %s %% %n"', '"fixed %% %n"', 'format']) {

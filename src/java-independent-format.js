@@ -2,6 +2,20 @@
 const { shadowsType } = require('./java-methods');
 const { formattingArray } = require('./java-format-arrays');
 
+function localeImportsKnown(index) {
+  for (const hit of index.mask.matchAll(/\bimport\b/g)) {
+    const end = index.mask.indexOf(';', hit.index);
+    if (end < 0 || end - hit.index > 4000) return false;
+    const declaration = index.mask.slice(hit.index, end + 1).match(
+      /^import\s+(static\s+)?((?:[A-Za-z_]\w*\s*\.\s*)+(?:[A-Za-z_]\w*|\*))\s*;$/);
+    if (!declaration || declaration[1]) return false;
+    const name = declaration[2].replace(/\s/g, '');
+    // Source inventory completeness says nothing about dependency classpaths.
+    if (name.endsWith('.*') || name.split('.').pop() === 'java') return false;
+  }
+  return true;
+}
+
 // A Boolean proof for this complete current call only. It never renders bytes
 // or creates a fact that a later output-context reconstruction could reuse.
 function independentFormat({ index, filter, project, call, windowStart, windowEnd }) {
@@ -28,7 +42,7 @@ function independentFormat({ index, filter, project, call, windowStart, windowEn
   if (after >= limit || index.mask[after] !== ';') return false;
   let args = call.args;
   if (/^java\.util\.Locale\.(?:ROOT|US|UK|ENGLISH)$/.test(args[0]?.trim())) {
-    if (!project?.complete || shadowsType(index, 'java', project) || index.imports.has('java') ||
+    if (!project?.complete || !localeImportsKnown(index) || shadowsType(index, 'java', project) || index.imports.has('java') ||
         index.className === 'java' || project.classes.has([index.package, 'java'].filter(Boolean).join('.')) ||
         project.classes.has('java.util.Locale')) return false;
     args = args.slice(1);
