@@ -49,7 +49,14 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       if (masked[end] === '{') depth++;
       if (masked[end] === '}') depth--;
     }
-    if (!depth) methods.push({ start, end: end - 1 });
+    if (!depth) {
+      const body = masked.slice(start, end - 1);
+      // Compatibility applies only to methods the original declaration guard
+      // accepted, including its rejection of every class literal in the body.
+      const baselineEligible = body.length <= 50000 &&
+        !/\b(?:class|interface|record|enum)\b|\bnew\b[^;]*\{/.test(body);
+      methods.push({ start, end: end - 1, baselineEligible });
+    }
     declaration.lastIndex = end;
   }
   const cache = new Map();
@@ -232,13 +239,14 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       if (expr.startsWith('(') && expr.endsWith(')')) return constant(expr.slice(1, -1), visiting, position, context);
       const split = expr.match(/^([\s\S]+)\.split\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)$/);
       if (split) return constant(split[1], visiting, position, context);
-      if (isSafeFact(summaries.callFact({ expression: expr, position: method.start + position, context,
+      if (!context.localOnly && isSafeFact(summaries.callFact({ expression: expr, position: method.start + position, context,
         prove: (argument, mode) => constant(argument, visiting, position, { ...context, mode }) }), context.mode)) return true;
       const identifier = expr.match(/^([A-Za-z_]\w*)(?:\s*\[[^\]]+\])?$/);
       if (!identifier) return false;
       const entry = resolve(identifier[1], position);
       if (!entry || entry.index >= position || entry.invalid || visiting.has(entry) || visiting.size > 32) return false;
-      if (entry.parameter && !isSafeFact(summaries.parameterFact({ methodStart: method.start, name: entry.name, context }), context.mode)) return false;
+      if (entry.parameter && (context.localOnly ||
+          !isSafeFact(summaries.parameterFact({ methodStart: method.start, name: entry.name, context }), context.mode))) return false;
       if (!entry.values.length) return !!entry.parameter;
       if (expr.includes('[') !== entry.array) return false;
       const next = new Set(visiting); next.add(entry);
@@ -319,6 +327,7 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
     // Receiver-independent execute recognition is removal-only. The positive
     // sink rule stays unchanged; unknown receivers confer no constant facts.
     const callPattern = new RegExp(`(?:${sink.source})|\\.\\s*execute\\s*\\(`, sink.flags.replace(/[gy]/g, '') + 'g');
+    const originalSink = new RegExp(`^(?:${sink.source})$`, sink.flags.replace(/[gy]/g, ''));
     for (const match of window.matchAll(callPattern)) {
       const pos = lineStart + match.index;
       if (masked[pos] !== code[pos]) continue;
@@ -344,7 +353,13 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       const args = callArgs(code.slice(pos, end), match[0].length);
       if (!args.length || !args.every((arg, index) =>
         proof(method)(arg, new Set(), pos - method.start) || index > 0 && classLiteralMetadata(arg))) return false;
-      if (!completeCallStatement(method, pos, start, end, Math.min(method.end, lineStart + window.length))) return false;
+      // Restore only original local-constant call coverage. Each argument gets
+      // a fresh bounded proof with both summary entry points disabled through
+      // all recursive aliases/arrays/splits. Ordinary proof above still permits
+      // helper facts in complete statements when this compatibility test fails.
+      const baselineLocal = originalSink.test(match[0]) && method.baselineEligible &&
+        args.every(arg => proof(method)(arg, new Set(), pos - method.start, { localOnly: true }));
+      if (!baselineLocal && !completeCallStatement(method, pos, start, end, Math.min(method.end, lineStart + window.length))) return false;
       calls.push([pos, end]);
     }
     const re = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '') + 'g');

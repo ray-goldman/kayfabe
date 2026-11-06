@@ -214,3 +214,121 @@ test('comma-separated fields can shadow an imported class owner', async t => {
   });
   assert.ok(hits.length);
 });
+
+test('helper-derived SQL arguments keep the envelope across recursive local proof paths', async t => {
+  for (const marker of ['', 'Object marker = Long.class;']) {
+    for (const [setup, argument] of [
+      ['String data = "fixed";', 'data + value()'],
+      ['String data = "fixed";', 'data + (value())'],
+      ['String data = value();', 'data'],
+      ['String selected = value(); String data = selected;', 'data'],
+      ['String selected = value(); String data = "prefix" + (selected);', 'data'],
+      ['String selected = value(); String[] names = selected.split("-"); String data = names[0];', 'data'],
+      ['String[] names = value().split("-"); String data = names[0];', 'data'],
+    ]) {
+      const source = `class Example { String data = request.getParameter("outer");
+        private String value() { ${marker} String answer = "fixed"; return answer; }
+        String run() {
+          ${setup} String input = request.getParameter("x");
+          return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + ${argument}) + input;
+        }
+      }`;
+      const label = `${marker} / ${setup} / ${argument}`;
+      // The complete-call twin proves the helper shape is actually supported;
+      // the warning below must come from its enclosing expression, not an
+      // already-unknown helper. The wrapper scan runs ordinary proof before
+      // local-only proof, so that ordinary success must not leak into fallback.
+      const complete = source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');');
+      assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+        [{ ruleId: 'JAVA-SQLI-002', line: 5 }], label);
+      assert.deepEqual(await findings(t, complete), [], label);
+    }
+  }
+});
+
+test('multi-hop newly class-enabled helper facts cannot bypass an old caller envelope', async t => {
+  const source = `class Example { String data = request.getParameter("outer");
+    private String leaf() { Object marker = Long.class; String answer = "fixed"; return answer; }
+    private String value() { String answer = leaf(); return answer; }
+    String run() {
+      String data = value(); String input = request.getParameter("x");
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data) + input;
+    }
+  }`;
+  assert.deepEqual(await findings(t, source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');')), []);
+  assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+    [{ ruleId: 'JAVA-SQLI-002', line: 6 }]);
+});
+
+test('project static helper facts newly enabled by class literals keep the old caller envelope', async t => {
+  for (const setup of [
+    'String data = "fixed";',
+    'String selected = Names.value(); String data = selected;',
+    'String[] names = Names.value().split("-"); String data = names[0];',
+  ]) {
+    const argument = setup === 'String data = "fixed";' ? 'data + Names.value()' : 'data';
+    const source = `import sample.Names; class Example { String data = request.getParameter("outer");
+      String run() {
+        ${setup} String input = request.getParameter("x");
+        return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + ${argument}) + input;
+      }
+    }`;
+    const extra = { 'sample/Names.java': `package sample; public class Names {
+      public static String value() { Object marker = Long.class; String answer = "fixed"; return answer; }
+    }` };
+    assert.deepEqual(await findings(t, source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');'), extra), [], setup);
+    assert.deepEqual((await findings(t, source, extra)).map(({ ruleId, file, line }) => ({ ruleId, file, line })),
+      [{ ruleId: 'JAVA-SQLI-002', file: 'Example.java', line: 4 }], setup);
+  }
+});
+
+test('private caller-parameter SQL facts cannot enter the local wrapper exception', async t => {
+  for (const caller of [
+    'void run() { String selected = "fixed"; consume(selected); }',
+    'void run() { Object marker = Long.class; String selected = "fixed"; consume(selected); }',
+    'private String value() { Object marker = Long.class; String answer = "fixed"; return answer; } void run() { String selected = value(); consume(selected); }',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer");
+      private String consume(String data) {
+        String input = request.getParameter("x");
+        return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data) + input;
+      }
+      ${caller}
+    }`;
+    assert.deepEqual(await findings(t, source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');')), [], caller);
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 4 }], caller);
+  }
+});
+
+test('every required argument must have independent local proof before bypassing a wrapper', async t => {
+  const source = `class Example { String data = request.getParameter("outer");
+    private String value() { Object marker = Long.class; String answer = "fixed"; return answer; }
+    String run() {
+      String data = "fixed"; String selected = value(); String input = request.getParameter("x");
+      return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, selected) + input;
+    }
+  }`;
+  assert.deepEqual(await findings(t, source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');')), []);
+  assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+    [{ ruleId: 'JAVA-SQLI-002', line: 5 }]);
+});
+
+test('caller-parameter facts stay disabled through local aliases, split bases and arrays', async t => {
+  for (const setup of [
+    'String data = seed;',
+    'String selected = seed; String data = "prefix" + (selected);',
+    'String[] names = seed.split("-"); String data = names[0];',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer");
+      private String consume(String seed) {
+        ${setup} String input = request.getParameter("x");
+        return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data) + input;
+      }
+      void run() { Object marker = Long.class; String selected = "fixed"; consume(selected); }
+    }`;
+    assert.deepEqual(await findings(t, source.replace('return jdbcTemplate', 'String result = jdbcTemplate').replace(') + input;', ');')), [], setup);
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 4 }], setup);
+  }
+});
