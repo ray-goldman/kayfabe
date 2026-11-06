@@ -141,7 +141,9 @@ Follow [the repository instructions](AGENTS.md) when reviewing a target: treat i
 
 ## Accuracy and limits
 
-The regression corpus contains 210 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
+The regression corpus contains 211 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
+
+The latest [Java String proof cycles](docs/JAVA-STRING-PROOFS.md) have measured 1 of two rounds against the historical verified C4 baseline: Java Juliet false positives **1117 → 1117**, OWASP Java **262 → 260**. Candidate reports are fresh; all seven unchanged keys retain previously detected true positives with no new labeled false positives. Original/localized CVE results, exposed-development limits and regression-only examples remain separate.
 
 The repeated [Java precision cycles](docs/JAVA-PRECISION-CYCLES.md) have measured 4 of four rounds: Java Juliet false positives **1136 → 1117**, OWASP Java **287 → 262**. All seven unchanged keys retain previously detected true positives with no new labeled false positives. The report separates recall, CVE-pair results and remaining proof gaps.
 
