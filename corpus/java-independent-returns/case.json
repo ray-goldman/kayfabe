@@ -1,0 +1,7 @@
+{
+  "id": "java-independent-returns",
+  "owasp": "A05",
+  "cwe": [89],
+  "description": "Private helper returns stay opaque to request parameters: an independent local literal is quiet, while returning a request-derived parameter retains SQL injection.",
+  "expect": ["JAVA-SQLI-001"]
+}

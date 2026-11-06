@@ -8,6 +8,80 @@ const { scan } = require('../src/engine');
 const escape = value => `org.springframework.web.util.HtmlUtils.htmlEscape(${value})`;
 const print = value => `response.getWriter().print(${value});`;
 
+test('independent opaque-reference helpers cannot hide HTML stream effects or claim encoding', async t => {
+  const safe = 'private String choose(HttpServletRequest request, String input) { return "fixed"; }';
+  assert.deepEqual(await findings(t, `String clean = choose(request, input); ${print('clean')}`, safe), []);
+  for (const method of [
+    'private String choose(HttpServletRequest request, String input) { request.startAsync().getResponse().getWriter().write("<script>"); return "fixed"; }',
+    'private String choose(HttpServletRequest request, String input) { field = request; return "fixed"; }',
+  ]) assert.ok((await findings(t, `String clean = choose(request, input); ${print('clean')}`, method)).length, method);
+  assert.ok((await findings(t, `String clean = choose(request, input); ${print('clean')}\n${print(escape('input'))}`,
+    'private String choose(HttpServletRequest request, String input) { return "<script>"; }')).length,
+  'fixed markup is not an encoding fact for later dynamic output');
+  // Existing supported-only encoder helpers still use their established route.
+  assert.deepEqual(await findings(t, `String clean = encode(input); ${print('clean')}`,
+    `private String encode(String input) { return ${escape('input')}; }`), []);
+});
+
+test('independent textual String bindings never certify implicit conversion effects across type scopes', async t => {
+  const customString = `public class String {
+    private final java.lang.String data;
+    private final javax.servlet.http.HttpServletRequest request;
+    public String(java.lang.String data, javax.servlet.http.HttpServletRequest request) { this.data = data; this.request = request; }
+    @Override public java.lang.String toString() {
+      try { request.startAsync().getResponse().getWriter().write(data); } catch (java.io.IOException error) { }
+      return "";
+    }
+  }`;
+  const shapes = [
+    { name: 'single-type import', first: 'import javax.servlet.http.*;', second: 'import sample.String;', parent: 'HttpServlet',
+      extra: { 'sample/String.java': `package sample; ${customString}` } },
+    { name: 'same package', first: 'package sample;', second: 'import javax.servlet.http.*;', parent: 'HttpServlet',
+      extra: { 'sample/String.java': `package sample; ${customString}` } },
+    { name: 'inherited member type', first: 'import javax.servlet.http.*;', second: 'import sample.Base;', parent: 'Base',
+      extra: { 'sample/Base.java': `package sample; public class Base extends javax.servlet.http.HttpServlet { ${customString.replace('public class String', 'public static class String')} }` } },
+    { name: 'unresolved single-type import', first: 'import javax.servlet.http.*;', second: 'import missing.String;', parent: 'HttpServlet' },
+    { name: 'unresolved inherited member', first: 'import javax.servlet.http.*;', second: 'import missing.Base;', parent: 'Base' },
+    { name: 'wildcard possibility', first: 'import javax.servlet.http.*;', second: 'import sample.*;', parent: 'HttpServlet',
+      extra: { 'sample/String.java': `package sample; ${customString}` } },
+  ];
+  for (const shape of shapes) await t.test(shape.name, async t => {
+    const source = body => `${shape.first}
+${shape.second}
+public class Example extends ${shape.parent} {
+ private String choose(HttpServletRequest request, String input) { ${body} }
+ protected void doPost(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
+  String input = new String(request.getParameter("x"), request);
+  String selected = choose(request, input);
+  response.getWriter().print(selected);
+ }
+}`;
+    const hits = async body => (await findings(t, '', '', { ...shape.extra, 'Example.java': source(body) }))
+      .map(({ ruleId, file, line }) => ({ ruleId, file, line }));
+    assert.deepEqual(await hits('return null;'), [], 'safe null-return twin proves route admission');
+    assert.deepEqual(await hits('String alias = input; boolean ignored = alias == input; return null;'), [], 'copy and identity comparison have no callback');
+    assert.deepEqual(await hits('input.toString(); return null;'), [{ ruleId: 'JAVA-XSS-001', file: 'Example.java', line: 8 }], 'explicit callback twin');
+    assert.deepEqual(await hits('boolean ignored = ("prefix" + input) == ""; return null;'),
+      [{ ruleId: 'JAVA-XSS-001', file: 'Example.java', line: 8 }], 'implicit conversion must not erase the warning');
+  });
+  for (const body of [
+    'String copy = input; boolean ignored = copy == input; return null;',
+    'boolean ignored = ("prefix" + (input == null)) == ""; return null;',
+    'String answer = "prefix" + "literal"; return answer;',
+  ]) assert.deepEqual(await findings(t, `String selected = choose(request, input); ${print('selected')}`,
+    `private String choose(HttpServletRequest request, String input) { ${body} }`, {
+      'Example.java': `import javax.servlet.http.*;
+import java.lang.String;
+class Example extends HttpServlet {
+ private String choose(HttpServletRequest request, String input) { ${body} }
+ protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+  String input = request.getParameter("x"); String selected = choose(request, input);
+  response.getWriter().print(selected);
+ }
+}`,
+    }), [], `genuine java.lang.String positive: ${body}`);
+});
+
 async function findings(t, body, methods = '', extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'appsec-java-sanitizers-'));
   t.after(() => {
