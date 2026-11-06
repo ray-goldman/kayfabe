@@ -1,0 +1,7 @@
+{
+  "id": "java-class-annotation-returns",
+  "owasp": "A05",
+  "cwe": [89],
+  "description": "Class String-literal annotation metadata allows an independent private opaque-reference helper return, while returning request input retains SQL injection.",
+  "expect": ["JAVA-SQLI-001"]
+}
