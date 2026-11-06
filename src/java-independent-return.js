@@ -310,4 +310,39 @@ function independentReturnEligible({ index, target, method, call, position, filt
   return localBody(index, method, budget);
 }
 
-module.exports = { independentReturnEligible };
+// Nominal ownership is required only by new String intrinsic/copy consumers.
+// Existing helper summaries keep their original header eligibility unchanged.
+function canonicalStringScope({ index, position, project, budget }) {
+  if (!index?.complete || !project?.complete || !budget || !Number.isFinite(budget.left) || budget.left <= 0) return false;
+  const caller = index.at(position);
+  if (!caller || !callerHeader(index, caller, budget)) return false;
+  const tokens = classHeaderTokens(index, index.mask.indexOf('{'), budget);
+  if (!tokens) return false;
+  const r = headerReader(tokens), imports = new Map();
+  if (r.take('package') && (!r.name() || !r.take(';'))) return false;
+  while (r.take('import')) {
+    // Unknown classpaths, member-type imports and malformed declarations cannot
+    // establish that an unqualified String denotes java.lang.String.
+    const name = r.name();
+    if (!name || !name.includes('.') || !r.take(';')) return false;
+    const short = name.split('.').pop();
+    if (imports.has(short) || short === 'String' && name !== 'java.lang.String' || short === 'java') return false;
+    imports.set(short, name);
+  }
+  if (!r.modifiers(new Set(['public', 'final', 'abstract', 'strictfp']), { classAnnotations: true }) ||
+      !r.take('class') || !r.take(index.className)) return false;
+  const parent = r.take('extends') ? r.name() : null;
+  // Nongeneric headers with no interfaces exclude inherited unknown member
+  // types; the bounded caller reader also excludes method type variables.
+  if (!r.done()) return false;
+  const sourceType = name => project.classes.has(name) ||
+    project.classes.has([index.package, name].filter(Boolean).join('.'));
+  if (sourceType('String') || sourceType('java') || project.classes.has('java.lang.String')) return false;
+  if (!parent) return !project.classes.has('java.lang.Object');
+  if (!parent.includes('.') && sourceType(parent)) return false;
+  const qualified = parent.includes('.') ? parent : imports.get(parent) || (parent === 'Object' ? 'java.lang.Object' : null);
+  return ['java.lang.Object', 'javax.servlet.http.HttpServlet', 'jakarta.servlet.http.HttpServlet'].includes(qualified) &&
+    !project.classes.has(qualified);
+}
+
+module.exports = { independentReturnEligible, canonicalStringScope };

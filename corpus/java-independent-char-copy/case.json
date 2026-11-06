@@ -1,0 +1,7 @@
+{
+  "id": "java-independent-char-copy",
+  "owasp": "A05",
+  "cwe": [79],
+  "description": "A direct canonical String character copy is independent only when a pure opaque-reference helper proves the complete value provenance.",
+  "expect": ["JAVA-XSS-001"]
+}
