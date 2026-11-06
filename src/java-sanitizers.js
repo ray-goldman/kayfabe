@@ -1,6 +1,7 @@
 'use strict';
 const { parseCall, shadowsType, argumentsOf } = require('./java-methods');
 const { formattingArray } = require('./java-format-arrays');
+const { independentFormat } = require('./java-independent-format');
 
 const HTML_ENCODERS = new Map([
   ['org.springframework.web.util.HtmlUtils', new Set(['htmlEscape'])],
@@ -220,7 +221,10 @@ function javaOutputFilter({ code, filter, project }) {
       if (call.kind === 'printf' && /^java\.util\.Locale\.(?:ROOT|US|UK|ENGLISH)$/.test(args[0]?.trim())) args = args.slice(1);
       if (args.length && args.every(arg => filter.valueAt(arg, position))) { found = true; continue; }
       const output = contextBefore(method, position);
-      if (!output || !render(call, output)) return false;
+      if (!output) return false;
+      if (htmlContext(output.text) === 'html-text' && independentFormat({ index, filter, project, call,
+        windowStart: offsets[line], windowEnd: offsets[line] + window.length })) { found = true; continue; }
+      if (!render(call, output)) return false;
       found = true;
     }
     return found;

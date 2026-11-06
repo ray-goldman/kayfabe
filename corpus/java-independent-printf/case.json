@@ -1,0 +1,7 @@
+{
+  "id": "java-independent-printf",
+  "owasp": "A05",
+  "cwe": [79],
+  "description": "Only pure opaque-reference helper scalars in an owned formatting carrier prove independent current printf output.",
+  "expect": ["JAVA-XSS-001"]
+}

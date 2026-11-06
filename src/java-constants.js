@@ -13,6 +13,7 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
     const unknown = () => false;
     unknown.sqlAssembly = unknown;
     unknown.valueAt = unknown;
+    unknown.independentOutputValuesAt = unknown;
     return unknown;
   }
   const summaries = createJavaSummaries({ file: options.file || '<file>', raw, code, project: options.project });
@@ -191,12 +192,15 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
     const dead = excludedBranches(body, (expr, position) => fact(expr, position));
     const unreachable = position => dead.some(([start, end]) => position >= start && position < end);
     let remaining;
-    function constant(expr, visiting = new Set(), position = Infinity, context = {}) {
-      if (--remaining < 0 || expr.length > 4000) return false;
+    function constant(expr, visiting = new Set(), position = Infinity, context = {}, traversalDepth = 0) {
+      if ((!context.independentOutputOnly && --remaining < 0) || expr.length > 4000) return false;
+      if (context.independentOutputOnly && traversalDepth > 48) return false;
       if (context.budget && --context.budget.left < 0) return false;
       expr = expr.trim();
       if (!expr) return false;
-      const value = fact(expr, position);
+      // Restricted caller provenance must survive EVERY alias. The ordinary
+      // evaluator also knows member/index/call facts and cannot supply it.
+      const value = context.independentOutputOnly ? null : fact(expr, position);
       if (value) return context.mode !== 'html' ||
         !String(value.type === 'char' ? String.fromCharCode(value.value) : value.value).includes('<');
       // Split concatenation only outside quoted strings, parentheses and indexes.
@@ -211,24 +215,29 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
         if (c === '+' && depth === 0) { parts.push(expr.slice(last, i)); last = i + 1; }
       }
       if (quote || depth !== 0) return false;
-      if (parts.length) return [...parts, expr.slice(last)].every(p => constant(p, visiting, position, context));
-      if (/^"(?:[^"\\]|\\.)*"$|^'(?:[^'\\]|\\.)*'$|^(?:true|false|null|\d+)$/.test(expr)) return context.mode !== 'html';
-      if (expr.startsWith('(') && expr.endsWith(')')) return constant(expr.slice(1, -1), visiting, position, context);
+      if (parts.length) return [...parts, expr.slice(last)].every(p => constant(p, visiting, position, context, traversalDepth + 1));
+      if (context.independentOutputOnly && /^(?:"(?:[^"\\\r\n]|\\[btnfr"'\\])*"|'(?:[^'\\\r\n]|\\[btnfr"'\\])'|true|false|(?:0|[1-9]\d*))$/.test(expr)) {
+        return !!evaluate(expr, () => null, context.budget);
+      }
+      if (context.independentOutputOnly && expr === 'null') return true;
+      if (!context.independentOutputOnly && /^"(?:[^"\\]|\\.)*"$|^'(?:[^'\\]|\\.)*'$|^(?:true|false|null|\d+)$/.test(expr)) return context.mode !== 'html';
+      if (expr.startsWith('(') && expr.endsWith(')')) return constant(expr.slice(1, -1), visiting, position, context, traversalDepth + 1);
       const split = expr.match(/^([\s\S]+)\.split\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)$/);
-      if (split) return constant(split[1], visiting, position, context);
+      if (split && !context.independentOutputOnly) return constant(split[1], visiting, position, context);
       if (!context.localOnly && isSafeFact(summaries.callFact({ expression: expr, position: method.start + position, context,
         prove: (argument, mode) => constant(argument, visiting, position, { ...context, mode }) }), context.mode)) return true;
       const identifier = expr.match(/^([A-Za-z_]\w*)(?:\s*\[[^\]]+\])?$/);
       if (!identifier) return false;
       const entry = resolve(identifier[1], position);
       if (!entry || entry.index >= position || entry.invalid || visiting.has(entry) || visiting.size > 32) return false;
+      if (context.independentOutputOnly && (entry.parameter || entry.array || expr !== identifier[1])) return false;
       if (entry.parameter && (context.localOnly ||
           !isSafeFact(summaries.parameterFact({ methodStart: method.start, name: entry.name, context }), context.mode))) return false;
       if (!entry.values.length) return !!entry.parameter;
       if (expr.includes('[') !== entry.array) return false;
       const next = new Set(visiting); next.add(entry);
       const reachable = entry.values.filter(value => !unreachable(value.offset));
-      return reachable.length > 0 && reachable.every(value => constant(value.expression, next, value.offset, context));
+      return reachable.length > 0 && reachable.every(value => constant(value.expression, next, value.offset, context, traversalDepth + 1));
     }
     const bounded = (expr, visiting, position, context) => {
       remaining = 512;
@@ -358,6 +367,18 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
   filter.valueAt = (expression, position, context = {}) => {
     const method = methods.find(m => position >= m.start && position < m.end);
     return !!method && proof(method)(expression, new Set(), position - method.start, context);
+  };
+  filter.independentOutputValuesAt = values => {
+    if (!summaries.index.complete || !Array.isArray(values) || !values.length || values.length > 32) return false;
+    const context = { independentOutputOnly: true, mode: 'constant', budget: { left: 10000, methods: new Set() }, stack: [] };
+    const owner = summaries.index.at(values[0]?.position);
+    if (!owner) return false;
+    return values.every(value => {
+      if (!value || typeof value.expression !== 'string' || !Number.isInteger(value.position) ||
+          summaries.index.at(value.position) !== owner) return false;
+      const method = methods.find(m => value.position >= m.start && value.position < m.end);
+      return !!method && proof(method)(value.expression, new Set(), value.position - method.start, context);
+    });
   };
   filter.literalAt = (expression, position) => {
     const method = methods.find(m => position >= m.start && position < m.end);

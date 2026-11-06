@@ -141,9 +141,9 @@ Follow [the repository instructions](AGENTS.md) when reviewing a target: treat i
 
 ## Accuracy and limits
 
-The regression corpus contains 209 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
+The regression corpus contains 210 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
 
-The repeated [Java precision cycles](docs/JAVA-PRECISION-CYCLES.md) have measured 3 of four rounds: Java Juliet false positives **1136 → 1117**, OWASP Java **287 → 264**. All seven unchanged keys retain previously detected true positives with no new labeled false positives. The report separates recall, CVE-pair results and remaining proof gaps.
+The repeated [Java precision cycles](docs/JAVA-PRECISION-CYCLES.md) have measured 4 of four rounds: Java Juliet false positives **1136 → 1117**, OWASP Java **287 → 262**. All seven unchanged keys retain previously detected true positives with no new labeled false positives. The report separates recall, CVE-pair results and remaining proof gaps.
 
 The latest [established Java precision pass](docs/JAVA-SQL-CALL-PRECISION.md) reduces Java Juliet false positives **1172 → 1136** and OWASP Java **289 → 287**. All seven unchanged keys retain previously detected true positives with no new labeled false positives. Recall and the original CVE-pair result are unchanged; the report documents the remaining legacy SQL-proof gap.
 

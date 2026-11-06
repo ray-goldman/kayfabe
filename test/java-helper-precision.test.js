@@ -22,6 +22,93 @@ async function findings(t, source, extra = {}, options = {}) {
 }
 const query = value => `statement.executeQuery("SELECT name FROM users WHERE name='" + ${value} + "'");`;
 
+test('independent owner fix1 rejects imported package prefixes in both opaque proof modes', async t => {
+  const { buildJavaProjectIndex } = require('../src/java-project');
+  const { stripComments } = require('../src/languages');
+  const fixtures = [
+    ['wildcard', 'import evil.*;', 'org.foo.Example.choose'],
+    ['explicit', 'import evil.org;', 'org.foo.Example.choose'],
+    ['spaced explicit', 'import evil /* gap */ . org;', 'org.foo.Example.choose'],
+    ['absent wildcard', 'import missing.*;', 'org.foo.Example.choose'],
+    ['genuine qualified coverage cost', '', 'org.foo.Example.choose'],
+    ['static field', 'import static evil.Names.Example;', 'Example.choose'],
+    ['static wildcard', 'import static evil.Names.*;', 'Example.choose'],
+    ['spaced static field', 'import /* gap */ static evil . Names . Example;', 'Example.choose'],
+  ];
+  for (const [name, imports, owner] of fixtures) await t.test(name, async t => {
+    const source = `package org.foo; import javax.servlet.http.HttpServletRequest; ${imports}
+class Example {
+  private static String choose(HttpServletRequest request, String input) { return "fixed"; }
+  void run(HttpServletRequest request) {
+    String input = request.getParameter("x");
+    String selected = ${owner}(request, input);
+    ${query('selected')}
+  }
+}`;
+    const extra = {
+      'evil/org.java': `package evil; public class org {
+        public static Namespace foo = new Namespace();
+        public static class Namespace { public Chooser Example = new Chooser(); }
+        public static class Chooser { public String choose(javax.servlet.http.HttpServletRequest request, String input) { return input; } }
+      }`,
+      'evil/Names.java': `package evil; public class Names {
+        public static Chooser Example = new Chooser();
+        public static class Chooser { public String choose(javax.servlet.http.HttpServletRequest request, String input) { return input; } }
+      }`,
+    };
+    if (name === 'absent wildcard') delete extra['evil/org.java'];
+    const files = { 'Example.java': source, ...extra };
+    const project = buildJavaProjectIndex(Object.entries(files).map(([file, raw]) => ({ file, raw, code: stripComments(raw, 'java') })));
+    const position = source.indexOf('statement.executeQuery');
+    const filter = project.byFile.get('Example.java').filter;
+    const observed = { ordinary: filter.valueAt('selected', position),
+      bulk: filter.independentOutputValuesAt([{ expression: 'selected', position }]) };
+    const control = await findings(t, source.replace('return "fixed";', 'return input;'), extra);
+    assert.ok(control.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-SQLI-001' && hit.line === 7), 'tainted-return candidate twin');
+    const hits = await findings(t, source, extra);
+    assert.deepEqual(observed, { ordinary: false, bulk: false }, 'both opaque proof modes');
+    assert.ok(hits.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-SQLI-001' && hit.line === 7), 'exact current SQL call');
+  });
+});
+
+test('independent owner fix1 preserves local owner shapes and old supported-only summaries', async t => {
+  const { constantSinkFilter } = require('../src/java-constants');
+  for (const [helper, owner] of [
+    ['private String choose(Request request, String input)', 'choose'],
+    ['private String choose(Request request, String input)', 'this.choose'],
+    ['private static String choose(Request request, String input)', 'Example.choose'],
+  ]) {
+    for (const imports of ['', 'import missing.*;', ...(owner === 'Example.choose' ? [] : ['import static missing.Names.*;'])]) {
+      const source = `package org.foo; ${imports} class Example {
+      ${helper} { return "fixed"; }
+      void run(Request request) {
+        String input = request.getParameter("x");
+        String selected = ${owner}(request, input);
+        ${query('selected')}
+      }
+    }`;
+      const position = source.indexOf('statement.executeQuery');
+      const filter = constantSinkFilter(source, () => []);
+      assert.equal(filter.valueAt('selected', position), true, owner + imports);
+      assert.equal(filter.independentOutputValuesAt([{ expression: 'selected', position }]), true, owner + imports);
+      assert.deepEqual(await findings(t, source), [], owner + imports);
+    }
+  }
+  const source = `package org.foo; import static evil.Names.*; class Example {
+    private static String old(String input) { return "fixed"; }
+    void run(Request request) {
+      String input = request.getParameter("x");
+      String selected = org.foo.Example.old(input);
+      ${query('selected')}
+    }
+  }`;
+  const position = source.indexOf('statement.executeQuery');
+  const filter = constantSinkFilter(source, () => []);
+  assert.equal(filter.valueAt('selected', position), true, 'old supported-only behavior remains');
+  assert.equal(filter.independentOutputValuesAt([{ expression: 'selected', position }]), false);
+  assert.deepEqual(await findings(t, source), []);
+});
+
 // These fixtures catch an over-broad independent-return route: a safe return
 // must be proved with opaque parameters, exact bindings, and its original sink
 // envelope. Every rejection has a supported complete-call twin below.

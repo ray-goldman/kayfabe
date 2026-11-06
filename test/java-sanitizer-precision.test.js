@@ -8,6 +8,302 @@ const { scan } = require('../src/engine');
 const escape = value => `org.springframework.web.util.HtmlUtils.htmlEscape(${value})`;
 const print = value => `response.getWriter().print(${value});`;
 
+const independentHelper = 'private String choose(HttpServletRequest request, String input) { return "fixed"; }';
+const independentPrintf = (format = '"%s"', locale = '') => `response.getWriter().printf(${locale}${format}, parts);`;
+const explicitServletImports = 'import javax.servlet.http.HttpServlet; import javax.servlet.http.HttpServletRequest; import javax.servlet.http.HttpServletResponse;';
+const independentServletSource = (body, methods) => `${explicitServletImports}
+  class Example extends HttpServlet {
+    ${methods}
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+      String input = request.getParameter("value");
+      ${body}
+    }
+  }`;
+
+test('independent owner fix1 Locale requires a known leading owner without import uncertainty', async t => {
+  const { buildJavaProjectIndex } = require('../src/java-project');
+  const { independentFormat } = require('../src/java-independent-format');
+  const { argumentsOf } = require('../src/java-methods');
+  const { stripComments } = require('../src/languages');
+  const source = imports => `${explicitServletImports}
+${imports}
+class Example extends HttpServlet {
+  ${independentHelper}
+  protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+    String input = request.getParameter("x");
+    String selected = choose(request, input);
+    Object[] parts = {selected};
+    response.getWriter().printf(java.util.Locale.US, "%s", parts);
+  }
+}`;
+  assert.deepEqual(await findings(t, '', '', { 'Example.java': source('') }), [], 'known owner positive');
+  assert.deepEqual(await findings(t, '', '', { 'Example.java': source('import harmless /* gap */ . Name;') }), [], 'ordinary normalized type import');
+  const cases = [
+    ['source wildcard', 'import evil.*;', { 'evil/java.java': `package evil; import java.util.Locale; public class java {
+      public static javax.servlet.http.HttpServletRequest request;
+      public static Namespace util = new Namespace();
+      public static class Namespace { public Carrier Locale = new Carrier(); }
+      public static class Carrier {
+        public Locale US = initialize();
+        private Locale initialize() {
+          request.startAsync().getResponse().getWriter().write(request.getParameter("x"));
+          return Locale.US;
+        }
+      }
+    }` }],
+    ['absent wildcard', 'import missing.*;', {}],
+    ['static root field', 'import static evil.Names.java;', {}],
+    ['static wildcard', 'import static missing.Names.*;', {}],
+    ['explicit root type', 'import evil.java;', {}],
+    ['spaced explicit root', 'import evil . java;', {}],
+    ['comment explicit root', 'import evil /* gap */ . /* gap */ java;', {}],
+    ['spaced wildcard', 'import missing /* gap */ . *;', {}],
+    ['unsupported import grammar', 'import evil..java;', {}],
+    ['same package source', '', { 'java.java': 'public class java { static Object util = callback(); }' }],
+  ];
+  for (const [name, imports, extra] of cases) await t.test(name, async t => {
+    const raw = source(imports), files = { ...extra, 'Example.java': raw };
+    const project = buildJavaProjectIndex(Object.entries(files).map(([file, raw]) => ({ file, raw, code: stripComments(raw, 'java') })));
+    const filter = project.byFile.get('Example.java').filter, code = filter.index.code;
+    const position = code.indexOf('response.getWriter()'), end = code.indexOf(';', position);
+    const call = { kind: 'printf', position, end,
+      args: argumentsOf(code.slice(code.indexOf('printf(', position) + 7, end - 1)) };
+    const strict = independentFormat({ index: filter.index, filter, project, call, windowStart: position, windowEnd: end + 1 });
+    const control = await findings(t, '', '', { ...extra, 'Example.java': raw.replace('return "fixed";', 'return input;') });
+    assert.ok(control.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-XSS-001' && hit.line === 9), 'tainted-return candidate twin');
+    const hits = await findings(t, '', '', files);
+    assert.equal(strict, false, 'strict checker: ' + name);
+    assert.ok(hits.some(hit => hit.file === 'Example.java' && hit.ruleId === 'JAVA-XSS-001' && hit.line === 9), 'exact current printf: ' + name);
+  });
+});
+
+function outputProof(body, helper = 'private String choose(Request request, String input) { return "fixed"; }') {
+  const { constantSinkFilter } = require('../src/java-constants');
+  const source = `class Example { ${helper} void run(Request request, String input) { ${body} consume(); } }`;
+  return { source, position: source.indexOf('consume()'), filter: constantSinkFilter(source, () => []) };
+}
+
+test('independent printf bulk query closes over literal provenance and exact opaque helpers only', () => {
+  const proof = outputProof(`String fixed = "[data]"; String alias = (fixed + "tail");
+    String selected = choose(request, input); String copy = selected; String nil = null;
+    String[] words = {"safe"}; String indexed = words[0]; int member = fixed.length();
+    char character = fixed.charAt(0); String oldValue = old(input); String encoded = org.springframework.web.util.HtmlUtils.htmlEscape(input);
+    String split = fixed.split("x")[0];`,
+  'private String choose(Request request, String input) { return "fixed"; } private String old(String input) { sideEffect(input); return "fixed"; }');
+  const query = expressions => proof.filter.independentOutputValuesAt(expressions.map(expression => ({ expression, position: proof.position })));
+  for (const expression of ['"[literal]"', '42', "'x'", 'true', 'fixed', 'alias', 'selected', 'copy', 'nil']) {
+    assert.equal(query([expression]), true, expression);
+  }
+  for (const expression of ['input', 'request', 'words[0]', 'indexed', 'member', 'character', 'oldValue', 'encoded', 'split',
+    'fixed.length()', 'fixed.charAt(0)', 'fixed.split("x")', 'new String()', '(Object) fixed', 'unknown()',
+    '"bad\\q"', '"line\nbreak"', "'many'", '"bad\\141"']) {
+    assert.equal(query([expression]), false, expression);
+    assert.equal(query(['selected', expression]), false, 'unselected element: ' + expression);
+  }
+  assert.equal(query([]), false);
+  assert.equal(query(Array(33).fill('fixed')), false);
+  assert.equal(query(['('.repeat(1900) + '"x"' + ')'.repeat(1900)]), false, 'deep wrappers remain bounded');
+  assert.equal(proof.filter.independentOutputValuesAt([{ expression: 'fixed', position: -1 }]), false);
+  assert.equal(proof.filter.independentOutputValuesAt([{ expression: 'fixed', position: proof.position + 0.5 }]), false);
+  assert.equal(proof.filter.independentOutputValuesAt([{ expression: 'fixed', position: proof.source.length }]), false);
+  // Ordinary helpers/encoders retain their old facts; the new bulk query does
+  // not borrow them, regardless of proof order or injected optional arguments.
+  assert.equal(proof.filter.valueAt('oldValue', proof.position), true);
+  assert.equal(query(['oldValue']), false);
+  assert.equal(proof.filter.independentOutputValuesAt([{ expression: 'input', position: proof.position }],
+    { parameters: new Map([['input', { known: true }]]), mode: 'html' }), false);
+});
+
+test('independent printf bulk shares work across elements and keeps callee parameters localOnly', () => {
+  const helper = `private String choose(Request request, String input) { int count = 0; ${'count = 1;'.repeat(200)} return "fixed"; }`;
+  const proof = outputProof('String selected = choose(request, input);', helper);
+  const entry = { expression: 'selected', position: proof.position };
+  assert.equal(proof.filter.independentOutputValuesAt([entry]), true);
+  assert.equal(proof.filter.independentOutputValuesAt(Array(32).fill(entry)), false, 'no per-element replenishment or safe cache');
+  assert.equal(proof.filter.independentOutputValuesAt([entry]), true, 'each new query is fresh');
+  for (const body of ['return input;', 'return choose(request, input);', 'return old(input);',
+    'request.toString(); return "fixed";', 'field = input; return "fixed";',
+    'boolean ignored = ("prefix" + input) == ""; return null;']) {
+    const candidate = outputProof('String selected = choose(request, input);',
+      `private String choose(Request request, String input) { ${body} } private String old(String input) { return "fixed"; }`);
+    assert.equal(candidate.filter.independentOutputValuesAt([{ expression: 'selected', position: candidate.position }]), false, body);
+  }
+  const parameter = outputProof('', 'private String choose(Request request, String input) { return "fixed"; } private void echo(String value) { consume(); } void caller() { echo("fixed"); }');
+  const position = parameter.source.indexOf('consume()');
+  assert.equal(parameter.filter.valueAt('value', position), true, 'ordinary parameterFact positive twin');
+  assert.equal(parameter.filter.independentOutputValuesAt([{ expression: 'value', position }]), false);
+});
+
+test('independent printf internal requests retain method depth mode and return-budget gates', () => {
+  const proof = outputProof('String selected = choose(request, input);',
+    'private String choose(Request request, String input) { if (true) return "one"; else return "two"; }');
+  const context = extra => ({ independentOutputOnly: true, mode: 'constant',
+    budget: { left: 10000, methods: new Set() }, stack: [], ...extra });
+  const accepts = state => proof.filter.valueAt('selected', proof.position, state);
+  assert.equal(accepts(context()), true);
+  assert.equal(accepts(context({ stack: ['a', 'b', 'c'] })), true);
+  assert.equal(accepts(context({ stack: ['a', 'b', 'c', 'd'] })), false);
+  assert.equal(accepts(context({ budget: { left: 10000, methods: new Set(Array.from({ length: 32 }, (_, i) => 'method-' + i)) } })), false);
+  assert.equal(accepts(context({ budget: { left: 0, methods: new Set() } })), false);
+  assert.equal(accepts(context({ mode: 'html' })), false);
+  const state = context();
+  assert.equal(accepts(state), true);
+  const firstLeft = state.budget.left;
+  assert.equal(accepts(state), true);
+  assert.ok(state.budget.left < firstLeft, 'shared requests spend work again rather than caching a safe return');
+  const contaminated = outputProof('String selected = choose(request, input);',
+    'private String choose(Request request, String input) { return input; }');
+  assert.equal(contaminated.filter.valueAt('selected', contaminated.position, context({
+    parameterMethod: contaminated.filter.index.methods[0].start,
+    parameters: new Map([['input', { known: true, dependencies: [], encodings: [] }]]),
+  })), false, 'fresh localOnly child discards caller parameter maps');
+});
+
+test('independent printf strict checker rejects legacy parser syntax and partial windows', () => {
+  const { independentFormat } = require('../src/java-independent-format');
+  const { argumentsOf } = require('../src/java-methods');
+  const check = (format, options = {}) => {
+    const text = `String selected = choose(request, input); Object[] parts = {selected}; response.getWriter().printf(${format}, parts);`;
+    const proof = outputProof(text);
+    const position = proof.source.indexOf('response.getWriter()');
+    const end = proof.source.indexOf(';', position);
+    const args = argumentsOf(proof.source.slice(proof.source.indexOf('printf(', position) + 7, end - 1));
+    return independentFormat({ index: proof.filter.index, filter: proof.filter,
+      call: { kind: 'printf', position, end, args }, windowStart: position, windowEnd: end + 1, ...options });
+  };
+  assert.equal(check('"%s"'), true);
+  for (const format of ['"%1$n"', '"%1$%"', '"%0$s"', '"%2$s"', '"%99$s"', '"%999$s"',
+    '"%"', '"%S"', '"%2s"', '"%.1s"', '"%d"', '"%<s"', '"%tY"', '"%s %s"', '"%" + "s"', 'choose(request, input)']) {
+    assert.equal(check(format), false, format);
+  }
+  assert.equal(check('"%s"', { windowEnd: 1 }), false);
+  assert.equal(check('"%s"', { windowStart: 100000 }), false);
+});
+
+test('independent printf rejects custom String and Formattable conversion callbacks and generic overload traps', async t => {
+  for (const [type, extra] of [
+    ['String', { 'sample/String.java': `package sample; public class String {
+      public java.lang.String toString() { callback(); return "fixed"; }
+    }` }],
+    ['Payload', { 'sample/Payload.java': `package sample; public class Payload implements java.util.Formattable {
+      public void formatTo(java.util.Formatter formatter, int flags, int width, int precision) { callback(); }
+    }` }],
+  ]) {
+    const source = `import javax.servlet.http.*; import sample.${type};
+      class Example extends HttpServlet {
+        private String choose(HttpServletRequest request, String input) { return "fixed"; }
+        protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+          String input = request.getParameter("x");
+          String selected = choose(request, input);
+          ${type} other = new ${type}(input);
+          Object[] parts = {selected, other};
+          response.getWriter().printf("%1$s %2$s", parts);
+        }
+      }`;
+    assert.ok((await findings(t, '', '', { ...extra, 'Example.java': source })).length, type);
+  }
+  for (const [header, helper, caller] of [
+    ['class Example<T>', 'private String choose(Request request, String input)', 'void run(Request request, String input)'],
+    ['class Example', 'private <T> String choose(Request request, String input)', 'void run(Request request, String input)'],
+    ['class Example', 'private String choose(Request request, String input)', '<Request extends CharSequence> void run(Request request, String input)'],
+  ]) {
+    const { constantSinkFilter } = require('../src/java-constants');
+    const source = `${header} { ${helper} { return "fixed"; } ${caller} { String selected = choose(request, input); consume(); } }`;
+    const filter = constantSinkFilter(source, () => []);
+    assert.equal(filter.independentOutputValuesAt([{ expression: 'selected', position: source.indexOf('consume()') }]), false, source);
+  }
+});
+
+test('independent printf admits only pure opaque scalar carriers in the current HTML call', async t => {
+  for (const helper of [independentHelper,
+    'private String choose(HttpServletRequest request, String input) { String answer; if (true) answer = "fixed"; else answer = input; return answer; }',
+    'private String choose(HttpServletRequest request, String input) { return true ? "fixed" : input; }']) {
+    for (const locale of ['', 'java.util.Locale.US, ']) {
+      const body = `String selected = choose(request, input);
+Object[] parts = {selected};
+
+        ${independentPrintf('"%s"', locale)}`;
+      const hits = locale ? await findings(t, '', '', { 'Example.java': independentServletSource(body, helper) }) :
+        await findings(t, body, helper);
+      assert.deepEqual(hits, [], helper + locale);
+    }
+  }
+  for (const format of ['"%s %2$s %s %% %n"', '"fixed %% %n"', 'format']) {
+    assert.deepEqual(await findings(t, `String selected = choose(request, input);
+String format = "%2$s";
+      Object[] parts = {selected, "[literal]"};
+ ${independentPrintf(format)}`, independentHelper), [], format);
+  }
+  const annotated = `import javax.servlet.http.*;
+    @Label("metadata") class Example extends HttpServlet {
+      ${independentHelper}
+      @Override protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+        String input = request.getParameter("x");
+String selected = choose(request, input);
+        Object[] parts = {selected};
+ ${independentPrintf()}
+      }
+    }`;
+  assert.deepEqual(await findings(t, '', '', { 'Example.java': annotated }), []);
+});
+
+test('independent printf rejects impure helpers, external elements and incomplete statements', async t => {
+  const setup = 'String selected = choose(request, input);\nObject[] parts = {selected};\n';
+  for (const helper of [
+    'private String choose(HttpServletRequest request, String input) { request.toString(); return "fixed"; }',
+    'private String choose(HttpServletRequest request, String input) { field = input; return "fixed"; }',
+    'private String choose(String input) { sideEffect(input); return "fixed"; }',
+    'private String choose(HttpServletRequest request, String input) { return input; }',
+  ]) {
+    const body = setup.replace('choose(request, input)', helper.includes('choose(String') ? 'choose(input)' : 'choose(request, input)');
+    assert.ok((await findings(t, `${body} ${independentPrintf()}`, helper)).length, helper);
+  }
+  for (const value of ['input', escape('input'), 'old(input)', 'input.charAt(0)', 'new Dangerous()', '(Object) selected']) {
+    assert.ok((await findings(t, `String selected = choose(request, input);
+String other = ${value};
+      Object[] parts = {selected, other};
+ ${independentPrintf('"%1$s"')}`,
+    independentHelper + ' private String old(String input) { sideEffect(input); return "fixed"; }')).length, value);
+  }
+  for (const call of [
+    'if (condition) ' + independentPrintf(), '{ ' + independentPrintf() + ' }',
+    'outer(' + independentPrintf().slice(0, -1) + ', input);',
+    independentPrintf().slice(0, -1) + '.append(input);',
+    'Object result = ' + independentPrintf(), 'return ' + independentPrintf(),
+  ]) assert.ok((await findings(t, `${setup} ${call}`, independentHelper)).length, call);
+  for (const format of ['"%"', '"%0$s"', '"%2$s"', '"%999999999999999999999$s"', '"%1$n %s"', '"%1$% %s"',
+    '"%S"', '"%d"', '"%02s"', '"%.2s"', '"%<s"', '"%tY"', '"%s %s"', 'choose(request, input)', '"%" + "s"']) {
+    assert.ok((await findings(t, `${setup} ${independentPrintf(format)}`, independentHelper)).length, format);
+  }
+});
+
+test('independent printf keeps ownership, carrier lifetime and stream replay conservative', async t => {
+  const setup = 'String selected = choose(request, input);\nObject[] parts = {selected};\n';
+  for (const change of ['parts[0] = input;', 'Object[] alias = parts;', 'mutate(parts);',
+    'parts = new Object[] {selected};', 'use(parts);']) {
+    assert.ok((await findings(t, `${setup} ${change}
+ ${independentPrintf()}`, independentHelper)).length, change);
+  }
+  for (const before of ['helper(response);', 'if (condition) ' + print('"<p>"'), print('"<script>"'), print('"<a href=\\\""'), print('"<!--"')]) {
+    assert.ok((await findings(t, `${before}
+ ${setup} ${independentPrintf()}`, independentHelper)).length, before);
+  }
+  for (const sibling of [print('input'), 'other.getWriter().print(input);', 'out.print(input);']) {
+    assert.ok((await findings(t, `${setup} ${independentPrintf()} ${sibling}`, independentHelper)).length, sibling);
+  }
+  for (const separator of [' ', '\n']) {
+    assert.ok((await findings(t, `${setup} ${independentPrintf()}${separator}${print(escape('input'))}`,
+      independentHelper.replace('"fixed"', '"<script>"'))).length, 'markup must stay unknown during replay');
+  }
+  for (const extra of [
+    { 'java/util/Locale.java': 'package java.util; public class Locale {}' },
+    { 'Example.java': `import javax.servlet.http.*; class Example extends HttpServlet {
+      Object java; ${independentHelper} protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+        String input = request.getParameter("x");
+ ${setup} ${independentPrintf('"%s"', 'java.util.Locale.US, ')} } }` },
+  ]) assert.ok((await findings(t, `${setup} ${independentPrintf('"%s"', 'java.util.Locale.US, ')}`, independentHelper, extra)).length);
+});
+
 test('independent opaque-reference helpers cannot hide HTML stream effects or claim encoding', async t => {
   const safe = 'private String choose(HttpServletRequest request, String input) { return "fixed"; }';
   assert.deepEqual(await findings(t, `String clean = choose(request, input); ${print('clean')}`, safe), []);
@@ -107,7 +403,8 @@ import java.lang.String;
 class Example extends HttpServlet {
  private String choose(HttpServletRequest request, String input) { ${body} }
  protected void doPost(HttpServletRequest request, HttpServletResponse response) {
-  String input = request.getParameter("x"); String selected = choose(request, input);
+  String input = request.getParameter("x");
+String selected = choose(request, input);
   response.getWriter().print(selected);
  }
 }`,

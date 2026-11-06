@@ -286,6 +286,11 @@ function localBody(index, method, budget) {
 
 function independentReturnEligible({ index, target, method, call, position, filter, budget }) {
   if (target.index !== index || !method.private || !filter) return false;
+  // A dotted owner may resolve through an imported type/value rather than the
+  // apparent package. Added opaque proofs accept only local owner syntax.
+  if (call.owner && call.owner !== 'this' && call.owner !== index.className) return false;
+  // Static imports can expose a value with the same spelling as our class.
+  if (call.owner === index.className && /\bimport\s+static\b/.test(index.mask)) return false;
   const caller = index.at(position);
   const header = caller && callerHeader(index, caller, budget);
   if (!header || header.static && (!method.static || call.owner === 'this') ||
