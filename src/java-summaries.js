@@ -36,6 +36,22 @@ function createJavaSummaries({ file, raw, code, project }) {
   function callFact({ expression, position, prove, context }) {
     const call = parseCall(expression);
     if (!call) return unknown();
+    if (context?.independentOutputOnly) {
+      // This request can enter only the existing opaque C2 gate. No encoder,
+      // supported-argument specialization, or caller parameter fact is visited.
+      const resolved = select(call), state = budget(context);
+      if (!resolved) return unknown();
+      const { target, method } = resolved;
+      if (state.mode !== 'constant' || !method.parameters.some(p => !['String', 'int', 'boolean', 'char', 'long'].includes(p.type)) ||
+          --state.budget.left < 0 || state.stack.length >= 4 || state.stack.includes(method.id)) return unknown();
+      state.budget.methods.add(method.id);
+      if (state.budget.methods.size > 32 || !method.returns.length || method.type !== 'String' ||
+          !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
+      const safe = method.returns.every(r => target.filter.valueAt(r.expression, r.offset, {
+        localOnly: true, mode: 'constant', budget: state.budget, stack: [...state.stack, method.id],
+      }));
+      return safe ? independent() : unknown();
+    }
     const encoder = javaEncodingFact({ index, project, expression,
       argumentFacts: () => call.args.map(arg => prove(arg, 'constant') ? independent() : unknown()) });
     if (encoder) return encoder;
