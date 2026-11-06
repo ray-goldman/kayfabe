@@ -39,6 +39,132 @@ const independentSource = (body = 'String answer = "fixed"; return answer;', {
   }
 }`;
 
+test('class annotation literals permit independent complete SQL calls and retain tainted returns', async t => {
+  for (const annotation of [
+    '@Arbitrary("label")', '@arbitrary.metadata.Label(value = "label")',
+    '@Label(first = "one", second = "two")', '@One("x") @Two(value = "y") @Marker',
+    '@Marker', '@Marker()', '@Label( /* metadata */ value /* name */ = "/* literal */ // text")',
+    '@Label("{ } < > ( ) @Other(value = \\\"quoted\\\") ; class Fake")',
+    String.raw`@Label("quote: \" slash: \\ tab: \t newline: \n return: \r back: \b form: \f apostrophe: \'")`,
+  ]) {
+    const options = { header: `${annotation}\npublic final class Example`,
+      caller: '@Override protected void run(Request request, Response response)' };
+    assert.deepEqual(await findings(t, independentSource(undefined, options)), [], annotation);
+    assert.ok((await findings(t, independentSource('return input;', options))).length, `tainted twin: ${annotation}`);
+  }
+});
+
+test('class annotation literal parser rejects unsupported argument grammar rather than erasing annotations', () => {
+  const { constantSinkFilter } = require('../src/java-constants');
+  const rejected = [
+    '@Label(CONSTANT)', '@Label(value = CONSTANT)', '@Label(null)', '@Label(true)', '@Label(123)', "@Label('x')",
+    '@Label(call())', '@Label(value = call())', '@Label(@Nested("x"))',
+    '@Label({"x"})', '@Label(value = {"x", "y"})', '@Label(String.class)', '@Label(Type<String>.class)',
+    '@Label(value = "x", value = "y")', '@Label("x", name = "y")', '@Label(name = "x", "y")',
+    '@Label("x", "y")', '@Label("x",)', '@Label(value = "x",)', '@Label(,)',
+    '@Label(value = "x" junk)', '@Label("x") junk', '@Label("x" + "y")', '@Label("x" "y")',
+    '@Label("unterminated)', '@Label("line\nbreak")', '@Label("line\rbreak")',
+    String.raw`@Label("bad\q")`, String.raw`@Label("truncated\")`,
+    String.raw`@Label("\u0061")`, String.raw`@Label("\141")`, String.raw`@Label("\s")`,
+    '@Label("""text block""")',
+  ];
+  for (const annotation of rejected) {
+    const source = independentSource(undefined, { header: `${annotation} class Example` });
+    const filter = constantSinkFilter(source, () => []);
+    assert.equal(filter.valueAt('choose(request, response, input)', source.indexOf('String selected')), false, annotation);
+  }
+  // The same parser entry proves a real supported candidate when syntax is ordinary.
+  const source = independentSource(undefined, { header: '@Label("ordinary") class Example' });
+  assert.equal(constantSinkFilter(source, () => []).valueAt('choose(request, response, input)', source.indexOf('String selected')), true);
+});
+
+test('class annotation literal metadata leaves caller placement and generic overload gates closed', async t => {
+  const header = '@Label("metadata") class Example';
+  assert.deepEqual(await findings(t, independentSource(undefined, { header })), []);
+  for (const options of [
+    { header: `${header}<T>` }, { header: `${header} extends Base<String>` },
+    { header: `${header} implements Marker<String>` }, { header: `${header} extends Base extra` },
+    { header: 'public @Label("metadata") class Example' },
+    { header: '@Label("metadata") public @TypeUse class Example' },
+    { caller: '<T> void run(Request request, Response response)' },
+    { caller: '@Label("metadata") void run(Request request, Response response)' },
+    { caller: '@Marker() void run(Request request, Response response)' },
+    { caller: 'public @Label("metadata") void run(Request request, Response response)' },
+    { caller: 'void run(@Label("metadata") Request request, Response response)' },
+  ]) assert.ok((await findings(t, independentSource(undefined, { header, ...options }))).length, JSON.stringify(options));
+  const extra = { 'Base.java': 'class Base { String choose(CharSequence input) { return System.getenv("VALUE"); } }' };
+  const trap = `@Label("metadata") class Example extends Base {
+    private String choose(Runnable input) { return "fixed"; }
+    <Runnable extends CharSequence> void run(Runnable input) { String selected = choose(input); ${query('selected')} }
+  }`;
+  assert.ok((await findings(t, trap, extra)).length, 'generic inherited overload trap');
+  assert.deepEqual(await findings(t, trap.replace('<Runnable extends CharSequence> ', ''), extra), [], 'nongeneric private twin');
+});
+
+test('class annotation literal metadata preserves effects, opaque dependencies and complete call envelopes', async t => {
+  const options = { header: '@Label("metadata") class Example' };
+  assert.deepEqual(await findings(t, independentSource(undefined, options)), []);
+  for (const body of [
+    'return input;', 'input = "fixed"; return input;', 'return request.getParameter("x");',
+    'callback(request); return "fixed";', 'field = input; return "fixed";',
+    'request.startAsync().getResponse().getWriter().write("<script>"); return "fixed";',
+    'boolean ignored = ("prefix" + input) == ""; return null;',
+    'String alias = input; alias = null; boolean ignored = ("prefix" + alias) == ""; return null;',
+  ]) assert.ok((await findings(t, independentSource(body, options))).length, body);
+  const complete = independentSource(undefined, { ...options,
+    sink: 'String result = jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected);' });
+  assert.deepEqual(await findings(t, complete), [], 'original complete sink');
+  for (const expression of [
+    'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected) + input',
+    'wrapper(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected), input)',
+  ]) assert.ok((await findings(t, complete.replace('jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected)', expression))).length, expression);
+  for (const values of ['"name"', "'x'", 'input']) assert.ok((await findings(t, complete.replace(' + selected)', ` + selected, new Object[] {${values}})`))).length, values);
+  assert.deepEqual(await findings(t, complete.replace(' + selected)', ' + selected, new Object[] {})')), []);
+});
+
+test('class annotation literals preserve shared budgets localOnly and fact isolation', () => {
+  const { constantSinkFilter } = require('../src/java-constants');
+  const options = { header: '@Label(value = "metadata") class Example' };
+  const source = independentSource(undefined, options), filter = constantSinkFilter(source, () => []);
+  const position = source.indexOf('String selected'), expression = 'choose(request, response, input)';
+  const method = filter.index.methods.find(m => m.name === 'choose');
+  assert.equal(filter.valueAt(expression, position), true);
+  for (const context of [
+    { budget: { left: 0, methods: new Set() } }, { budget: { left: 20, methods: new Set() } },
+    { budget: { left: 10000, methods: new Set(Array.from({ length: 32 }, (_, i) => `other:${i}`)) } },
+    { stack: [method.id] }, { stack: ['a', 'b', 'c', 'd'] }, { localOnly: true }, { mode: 'html' },
+  ]) assert.equal(filter.valueAt(expression, position, context), false, JSON.stringify(context));
+  const budget = { left: 10000, methods: new Set() };
+  assert.equal(filter.valueAt(expression, position, { budget }), true);
+  assert.ok(budget.left < 10000 && budget.methods.has(method.id));
+  for (const body of ['return input;', 'String alias = input; return alias;']) {
+    const tainted = independentSource(body, options), proof = constantSinkFilter(tainted, () => []);
+    const callee = proof.index.methods.find(m => m.name === 'choose');
+    assert.equal(proof.valueAt(expression, tainted.indexOf('String selected'), {
+      parameters: new Map([['input', { known: true, dependencies: [], encodings: [], evidence: [] }]]),
+      parameterMethod: callee.start, external: true,
+    }), false, body);
+  }
+});
+
+test('class annotation literal parser enforces header token character and annotation bounds', () => {
+  const { constantSinkFilter } = require('../src/java-constants');
+  const prove = header => {
+    const source = independentSource(undefined, { header });
+    return constantSinkFilter(source, () => []).valueAt('choose(request, response, input)', source.indexOf('String selected'));
+  };
+  assert.equal(prove(`${'@M("x") '.repeat(16)}class Example`), true, '16 annotation limit');
+  assert.equal(prove(`${'@M("x") '.repeat(17)}class Example`), false, '17 annotations');
+  const prefix = '@M("', suffix = '") class Example ';
+  // independentSource adds one space between this header and the opening brace.
+  assert.equal(prove(prefix + 'x'.repeat(3999 - prefix.length - suffix.length) + suffix), true, '4000 header characters');
+  assert.equal(prove(prefix + 'x'.repeat(4000 - prefix.length - suffix.length) + suffix), false, '4001 header characters');
+  const names = count => Array.from({ length: count }, (_, i) => `p${i}="x"`).join(',');
+  assert.equal(prove(`@M(${names(62)}) class Example`), true, '253 tokens');
+  assert.equal(prove(`@M(${names(63)}) class Example`), false, '257 tokens');
+  assert.equal(prove(`@M("${'x'.repeat(100000)}") class Example`), false, 'huge literal');
+});
+
 test('independent returns accept exact opaque formals and unused tainted String bindings', async t => {
   for (const options of [
     {},

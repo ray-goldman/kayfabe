@@ -15,6 +15,40 @@ function headerTokens(text) {
   const tokens = text.match(/[A-Za-z_]\w*|[^\s]/g) || [];
   return tokens.length <= 256 ? tokens : null;
 }
+// Class metadata alone may contain literal tokens. Read the comment-stripped
+// source at the mask's offsets: masked whitespace is never evidence of a value.
+// Ordinary String escapes admitted here are b, t, n, f, r, ", ' and backslash.
+// Octal, Unicode preprocessing, text blocks and line continuations stay unknown.
+function classHeaderTokens(index, open, budget) {
+  if (open > 4000) return null;
+  const text = index.code.slice(0, open), mask = index.mask.slice(0, open);
+  if (text.length !== mask.length || (budget.left -= text.length) < 0) return null;
+  const tokens = [];
+  const token = /\s+|[A-Za-z_]\w*|[^\s]/gy;
+  for (let at = 0; at < text.length;) {
+    if (text[at] === '"') {
+      if (mask[at] !== '"' || text.startsWith('"""', at)) return null;
+      let end = at + 1;
+      for (; end < text.length && text[end] !== '"'; end++) {
+        if (text[end] === '\r' || text[end] === '\n' || mask[end] !== ' ') return null;
+        if (text[end] === '\\') {
+          if (!'btnfr"\'\\'.includes(text[end + 1] || '\0') || mask[++end] !== ' ') return null;
+        }
+      }
+      if (end >= text.length || mask[end] !== '"') return null;
+      tokens.push({ kind: 'string' });
+      at = end + 1;
+    } else {
+      token.lastIndex = at;
+      const match = token.exec(text);
+      if (!match || mask.slice(at, token.lastIndex) !== match[0]) return null;
+      if (match[0].trim()) tokens.push(match[0]);
+      at = token.lastIndex;
+    }
+    if (tokens.length > 256) return null;
+  }
+  return tokens;
+}
 function headerReader(tokens) {
   let at = 0;
   const peek = () => tokens[at];
@@ -28,11 +62,26 @@ function headerReader(tokens) {
     }
     return result;
   }
-  function modifiers(allowed) {
+  const literal = () => tokens[at]?.kind === 'string' && (++at, true);
+  function annotationArguments() {
+    if (!take('(') || take(')')) return true;
+    if (literal()) return !!take(')');
+    const elements = new Set();
+    do {
+      const element = peek();
+      if (!identifier(element) || elements.has(element)) return false;
+      elements.add(element);
+      take(element);
+      if (!take('=') || !literal()) return false;
+    } while (take(','));
+    return !!take(')');
+  }
+  function modifiers(allowed, { classAnnotations = false } = {}) {
     const found = new Set();
     let annotations = 0;
     while (take('@')) {
       if (++annotations > 16 || !name()) return null;
+      if (classAnnotations && !annotationArguments()) return null;
     }
     // Only leading declaration markers are understood. An annotation after a
     // modifier can be a return-type annotation and stays outside this grammar.
@@ -47,8 +96,8 @@ function headerReader(tokens) {
   return { peek, take, name, modifiers, done: () => at === tokens.length };
 }
 
-function classHeader(index, open) {
-  const tokens = headerTokens(index.mask.slice(0, open));
+function classHeader(index, open, budget) {
+  const tokens = classHeaderTokens(index, open, budget);
   if (!tokens) return false;
   const r = headerReader(tokens);
   if (r.take('package') && (!r.name() || !r.take(';'))) return false;
@@ -66,7 +115,7 @@ function classHeader(index, open) {
     }
     if (!r.take(';')) return false;
   }
-  if (!r.modifiers(new Set(['public', 'final', 'abstract', 'strictfp'])) ||
+  if (!r.modifiers(new Set(['public', 'final', 'abstract', 'strictfp']), { classAnnotations: true }) ||
       !r.take('class') || !r.take(index.className)) return false;
   if (r.take('extends') && !r.name()) return false;
   if (r.take('implements')) {
@@ -79,7 +128,7 @@ function classHeader(index, open) {
 // boundaries. The index's single-class and balanced-body checks still apply.
 function callerHeader(index, caller, budget) {
   const open = index.mask.indexOf('{');
-  if (open < 0 || !classHeader(index, open)) return null;
+  if (open < 0 || !classHeader(index, open, budget)) return null;
   let start = open + 1, braces = 1;
   const delimiters = [];
   let header = null;

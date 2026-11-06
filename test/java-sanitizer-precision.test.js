@@ -23,6 +23,38 @@ test('independent opaque-reference helpers cannot hide HTML stream effects or cl
     `private String encode(String input) { return ${escape('input')}; }`), []);
 });
 
+test('class annotation literal metadata cannot hide custom String callbacks or response stream effects', async t => {
+  const customString = `package sample; public class String {
+    private final java.lang.String data;
+    private final javax.servlet.http.HttpServletRequest request;
+    public String(java.lang.String data, javax.servlet.http.HttpServletRequest request) { this.data = data; this.request = request; }
+    @Override public java.lang.String toString() {
+      try { request.startAsync().getResponse().getWriter().write(data); } catch (java.io.IOException error) { }
+      return "";
+    }
+  }`;
+  const source = body => `import javax.servlet.http.*;
+import sample.String;
+@Arbitrary(label = "{ } < > ( ) metadata")
+class Example extends HttpServlet {
+ private String choose(HttpServletRequest request, String input) { ${body} }
+ @Override protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+  String input = new String(request.getParameter("x"), request);
+  String selected = choose(request, input);
+  response.getWriter().print(selected);
+ }
+}`;
+  const hits = async body => findings(t, '', '', { 'sample/String.java': customString, 'Example.java': source(body) });
+  assert.deepEqual(await hits('return null;'), [], 'quiet independent null-return twin');
+  assert.deepEqual(await hits('String alias = input; boolean ignored = alias == input; return null;'), [], 'reference identity has no conversion');
+  for (const body of [
+    'input.toString(); return null;',
+    'boolean ignored = ("prefix" + input) == ""; return null;',
+    'String alias = input; alias = null; boolean ignored = ("prefix" + alias) == ""; return null;',
+    'request.startAsync().getResponse().getWriter().write("<script>"); return null;',
+  ]) assert.ok((await hits(body)).some(hit => hit.file === 'Example.java' && hit.line === 9), body);
+});
+
 test('independent textual String bindings never certify implicit conversion effects across type scopes', async t => {
   const customString = `public class String {
     private final java.lang.String data;

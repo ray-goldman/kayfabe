@@ -1,0 +1,1729 @@
+{
+  "schema": "kayfabe-java-precision-cycle@1",
+  "cycle": 3,
+  "label": "c3v1",
+  "title": "Literal class-annotation metadata",
+  "measuredCodeCommit": "1505974e36f96f1df30823406c708dcc284f4359",
+  "measurement": {
+    "schema": "kayfabe-established-precision-verification@1",
+    "status": "frozen-measurement-complete",
+    "measuredAt": "2026-11-06T05:34:31.485Z",
+    "sources": {
+      "before": {
+        "commit": "409b5dc0075b147eba05edc284142eeeaa737c7c",
+        "tree": "e09bbf461e3a8fb019e508917e93a1540393787c",
+        "files": 1130,
+        "sourceSha256": "97d5a83c05c6a2537c4a801042061cf0068a173f7d0d6c8a5876c6d26df6413a",
+        "archiveSha256": "3365e2bd800f44549829d29ee0344940a4f17911abdada5af6aa25b7b3de61ad",
+        "inventorySha256": "9a1ae2188a151df784d5c509e70d5f0c0b7a7973796ea7b55d30fe1dd730ea96",
+        "normalizedFiles": 1121
+      },
+      "after": {
+        "commit": "1505974e36f96f1df30823406c708dcc284f4359",
+        "tree": "670db4fb00de40201abc03b3ef179646727f6d26",
+        "files": 1134,
+        "sourceSha256": "5a19e3f84b770c08895f5d2cdf49713fe61b1664d147327b57db48ba462de6a6",
+        "archiveSha256": "5d8d9665aa22f76382c880ea4b3e4487f7bf84749f2ef76ebbf5a83e53540776",
+        "inventorySha256": "30b8ec00e1ea0d28d58596fd5fad802adbbeca6072813fd715b9012032e03687",
+        "normalizedFiles": 1125
+      }
+    },
+    "evaluatorPolicyFilesVerified": 26,
+    "established": {
+      "datasets": {
+        "csharp": {
+          "inputSha256": "6fde14e0e66fbd5fa2f6a58dae4299e6d92f6951b74b9a8ce9b061be5f515c9b",
+          "policy": {
+            "id": "juliet-csharp-testcase-cwe-polarity-regions@1",
+            "sha256": "f0ce86daa6f878ca6209da7d970d561edc6fdedfb2e16bb8d80fccc6550b86db"
+          },
+          "before": {
+            "cases": 59282,
+            "tp": 1036,
+            "fp": 470,
+            "tn": 29131,
+            "fn": 28645,
+            "recall": 0.03490448435025774,
+            "falsePositiveRate": 0.015877841964798488,
+            "precision": 0.6879150066401063
+          },
+          "after": {
+            "cases": 59282,
+            "tp": 1036,
+            "fp": 470,
+            "tn": 29131,
+            "fn": 28645,
+            "recall": 0.03490448435025774,
+            "falsePositiveRate": 0.015877841964798488,
+            "precision": 0.6879150066401063
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "dd3a93845c2fc1abbc2535f11888b7be8880901cb994cbd911a0d7b216e1131f",
+          "afterReportSha256": "9086f7ad343fa2b8080caf5999fa68a394e484b7ede94f3c92b356d61d6b384f"
+        },
+        "owasp-java": {
+          "inputSha256": "aa8e0b1bdc78551ba2154ba7b65ee62c054cd576e0cd6f6ef90ec87e060e707d",
+          "policy": {
+            "id": "owasp-java-file-cwe@1",
+            "sha256": "ffb169b86694010bdc25d441ed745e70e147614304f00aa4303798931fbc5e82"
+          },
+          "before": {
+            "cases": 2740,
+            "tp": 571,
+            "fp": 286,
+            "tn": 1039,
+            "fn": 844,
+            "recall": 0.40353356890459363,
+            "falsePositiveRate": 0.2158490566037736,
+            "precision": 0.6662777129521587
+          },
+          "after": {
+            "cases": 2740,
+            "tp": 571,
+            "fp": 264,
+            "tn": 1061,
+            "fn": 844,
+            "recall": 0.40353356890459363,
+            "falsePositiveRate": 0.19924528301886793,
+            "precision": 0.6838323353293413
+          },
+          "transitions": {
+            "fpToTn": 22,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "1b929c79668638b634f96016eb7ef06d79da06559f7a95d3e54e825ea3c79794",
+          "afterReportSha256": "e71bdf5dc64f5775531a3d1c4e278f5fbf03e0c673deaedf1d1b9cf12a04339b"
+        },
+        "juliet-java": {
+          "inputSha256": "a1f620b0525b3c18048cbdfabda2bf18f1fbec59bd34204eb5b3ea9da8d31905",
+          "policy": {
+            "id": "juliet-java-testcase-cwe-polarity-regions@1",
+            "sha256": "a882b93f704784d1ab29f0e9f26b1298b4a0c1920c79663700678cc1294a18dc"
+          },
+          "before": {
+            "cases": 57649,
+            "tp": 2410,
+            "fp": 1117,
+            "tn": 27651,
+            "fn": 26471,
+            "recall": 0.08344586406287871,
+            "falsePositiveRate": 0.03882786429365962,
+            "precision": 0.6833002551743691
+          },
+          "after": {
+            "cases": 57649,
+            "tp": 2410,
+            "fp": 1117,
+            "tn": 27651,
+            "fn": 26471,
+            "recall": 0.08344586406287871,
+            "falsePositiveRate": 0.03882786429365962,
+            "precision": 0.6833002551743691
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "c4dac78c5cb0bb5fbc9376d9d79548e47129ee657baae0b66bb1464c4ff99880",
+          "afterReportSha256": "0bd083e97d88466dbf7834ce58861f74e6061bff8f5e82f59050e41270eba74a"
+        },
+        "sard": {
+          "inputSha256": "a2a2ce017a0ae7425b3011b275bb70d9cbbeffe258f03bba2b74f975455e07ec",
+          "policy": {
+            "id": "sard-sarif-location-cwe@1",
+            "sha256": "e601bc944339db397db0f141086673dc22a79519bb101295e0bb0d500565c21e"
+          },
+          "before": {
+            "cases": 20,
+            "tp": 10,
+            "fp": 0,
+            "tn": 0,
+            "fn": 10,
+            "recall": 0.5,
+            "falsePositiveRate": null,
+            "precision": 1
+          },
+          "after": {
+            "cases": 20,
+            "tp": 10,
+            "fp": 0,
+            "tn": 0,
+            "fn": 10,
+            "recall": 0.5,
+            "falsePositiveRate": null,
+            "precision": 1
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "768f1d343b29b796f3c8458a481942884e84c53871367df59b7de7561bcc296c",
+          "afterReportSha256": "3a459cacf3aa7dcc971814154eefdcff8343f5b1a7a78be3d69e5818dd9774eb"
+        },
+        "cve-fixes": {
+          "inputSha256": "854acf4a769874fa8cb8b6ace227cc47fd6b5996a8404d649326039e00449734",
+          "policy": {
+            "id": "cve-changed-file-cwe@1",
+            "sha256": "239ff4dc70992458fa6c05d9a6e2f3cb269383625758dcdc9355ee7d60e0512f"
+          },
+          "before": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 1,
+            "tn": 7,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0.125,
+            "precision": 0.5
+          },
+          "after": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 1,
+            "tn": 7,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0.125,
+            "precision": 0.5
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "f1bc8e80685c2dd810492e1e2ec0914e84bba25397645d5b5964b42ce2919891",
+          "afterReportSha256": "d3bc4f474d5e137b440d35ba601c769f688dc2435e38b75bde0affd949d33905",
+          "originalPairs": {
+            "before": {
+              "total": 8,
+              "successful": 0,
+              "rate": 0
+            },
+            "after": {
+              "total": 8,
+              "successful": 0,
+              "rate": 0
+            }
+          },
+          "localized": {
+            "policy": {
+              "id": "cve-fix-region@1",
+              "sha256": "cd9b2afdb597892cd228fb5757c5ca42b71362cb2f4570c95679e5679a952b9c"
+            },
+            "before": {
+              "cases": 16,
+              "tp": 1,
+              "fp": 0,
+              "tn": 8,
+              "fn": 7,
+              "recall": 0.125,
+              "falsePositiveRate": 0,
+              "precision": 1
+            },
+            "after": {
+              "cases": 16,
+              "tp": 1,
+              "fp": 0,
+              "tn": 8,
+              "fn": 7,
+              "recall": 0.125,
+              "falsePositiveRate": 0,
+              "precision": 1
+            },
+            "pairs": {
+              "before": {
+                "total": 8,
+                "successful": 1,
+                "rate": 0.125
+              },
+              "after": {
+                "total": 8,
+                "successful": 1,
+                "rate": 0.125
+              }
+            },
+            "transitions": {
+              "fpToTn": 0,
+              "tpToFn": 0,
+              "tnToFp": 0,
+              "fnToTp": 0
+            }
+          }
+        },
+        "supplied": {
+          "inputSha256": "4828e75960d397b6f286519bebd01c684a1042e0a4c385258a2518f491991a2c",
+          "policy": {
+            "id": null,
+            "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+          },
+          "before": {
+            "cases": 227,
+            "tp": 87,
+            "fp": 11,
+            "tn": 79,
+            "fn": 50,
+            "recall": 0.635036496350365,
+            "falsePositiveRate": 0.12222222222222222,
+            "precision": 0.8877551020408163
+          },
+          "after": {
+            "cases": 227,
+            "tp": 87,
+            "fp": 11,
+            "tn": 79,
+            "fn": 50,
+            "recall": 0.635036496350365,
+            "falsePositiveRate": 0.12222222222222222,
+            "precision": 0.8877551020408163
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "bd2615a8ccf92b6f72c0f84d562997872b5def7620326382f1f449584f4acab7",
+          "afterReportSha256": "a9ddcf165133f214524d11c407aa2ffb58a332e6ed6aedd29b4f908ad28bdcf5"
+        },
+        "dotnet-apps": {
+          "inputSha256": "e5b514512a82a4ce023d7eff8d07876a33ec6a896e0ed420c309183863aa4289",
+          "policy": {
+            "id": null,
+            "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+          },
+          "before": {
+            "cases": 230,
+            "tp": 32,
+            "fp": 1,
+            "tn": 90,
+            "fn": 107,
+            "recall": 0.2302158273381295,
+            "falsePositiveRate": 0.01098901098901099,
+            "precision": 0.9696969696969697
+          },
+          "after": {
+            "cases": 230,
+            "tp": 32,
+            "fp": 1,
+            "tn": 90,
+            "fn": 107,
+            "recall": 0.2302158273381295,
+            "falsePositiveRate": 0.01098901098901099,
+            "precision": 0.9696969696969697
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "3279e5983c182b521bec563daf26e73d75a606de2b3ec61280580fbe6b97b03b",
+          "afterReportSha256": "c2c06b4c056eea03e48b103a4204a2869833688271860cdc1e088ac963b66019"
+        }
+      },
+      "qualifying": {
+        "fpToTn": 22,
+        "fnToTp": 0,
+        "total": 22,
+        "policy": "Seven established original-policy dataset unit transitions only; localized CVE reported separately, never added to original-policy totals"
+      },
+      "performance": {
+        "beforeMs": 70224,
+        "afterMs": 65634,
+        "ratio": 0.9346377306903623,
+        "limit": 1.5,
+        "speedupClaim": false
+      }
+    },
+    "tests": {
+      "total": 1132,
+      "passed": 1129,
+      "failed": 0,
+      "skipped": 3,
+      "cancelled": 0,
+      "todo": 0,
+      "corpusPairs": 209
+    },
+    "selfAudit": {
+      "scope": "production src/, bin/, package.json; fixture/test/docs/agent/workflow directories excluded explicitly; no full-coverage claim",
+      "candidates": 4,
+      "unreviewed": 0,
+      "manualDispositionsReusedByExactFindingAndFileHashes": true
+    },
+    "generated": [
+      {
+        "cycle": 1,
+        "tier": "self-authored-development",
+        "inventorySha256": "cf1642708fc3ce8beaa4888209fa873f954ebc2da91f68f73865a77f8e56c308",
+        "keySha256": "584621d4a3e47aa61c718f2297cc5c8c2bd6dd34b393cb7e06bdad936c01931f",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 5,
+            "tp": 4,
+            "fn": 0,
+            "fp": 1,
+            "quietUncredited": 3,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 5,
+            "tp": 4,
+            "fn": 0,
+            "fp": 1,
+            "quietUncredited": 3,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 7,
+            "tp": 4,
+            "fn": 0,
+            "fp": 3,
+            "quietUncredited": 1,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 7,
+            "tp": 4,
+            "fn": 0,
+            "fp": 3,
+            "quietUncredited": 1,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 2,
+        "tier": "self-authored-development",
+        "inventorySha256": "1694077a233bb30a843186ccacdb3d56f1c4ba30941304eb12957e5567f66505",
+        "keySha256": "f0d2b26327b26b9ac9caa387f9b18ca72e5f4ae00fd5bf7a24b1345e204d51bf",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 3,
+        "tier": "self-authored-development",
+        "inventorySha256": "3c9994e07472b0b22ed4db69023d9bf5d7dfa55d64ddef66e9be6ff2f8e8a29c",
+        "keySha256": "eb590753446b3be9bdda5524458f750915c37de8bbd0cc3f59b92b90d30a3f67",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 4,
+        "tier": "self-authored-development",
+        "inventorySha256": "d848db06c01960e58529d3f267dabe8f5df3fd5021b0a4f73d60033ca255006d",
+        "keySha256": "70621d25876ced300290d2f98da92cc08832d43ec165adb6ca3731f6cba3821e",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 5,
+        "tier": "self-authored-development",
+        "inventorySha256": "00a9d8e02c989869bc1f7b0c6ec7c2645aeb985935d4cf55ee73b80e3f0f8e8b",
+        "keySha256": "6e0698ce2dbfd90d8dd4334c27aff1da82b2de095a6167d83cd54591c90c2b0c",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      }
+    ],
+    "safeOnly": {
+      "keySha256": "22bdfdf0926e28ef80b46507e1499cdafb307549b4e17ec277a7703bf8c5e4fa",
+      "policySha256": "8a8cd38a00d7dbd65abaaa5ca14b425cd479ec7f21378b5d518887acc9954fad",
+      "scorerSha256": "e2b0613acb75f76bfe81478f03d6b82b43ab7b38b3c00d09c4a43850179c4b31",
+      "profiles": [
+        {
+          "profile": "default",
+          "csharp": {
+            "safeCases": 20,
+            "fpCases": 0,
+            "tnCases": 20,
+            "unresolved": 0,
+            "fpRuleEvents": 0,
+            "falsePositiveRate": 0,
+            "suppliedPolicyEventRate": 0,
+            "recall": null
+          },
+          "nativeC": {
+            "unsupported": 12,
+            "tn": 0,
+            "falsePositiveRate": null
+          }
+        },
+        {
+          "profile": "project",
+          "csharp": {
+            "safeCases": 20,
+            "fpCases": 0,
+            "tnCases": 20,
+            "unresolved": 0,
+            "fpRuleEvents": 0,
+            "falsePositiveRate": 0,
+            "suppliedPolicyEventRate": 0,
+            "recall": null
+          },
+          "nativeC": {
+            "unsupported": 12,
+            "tn": 0,
+            "falsePositiveRate": null
+          }
+        }
+      ]
+    },
+    "priorFrozen": [
+      {
+        "profile": "default",
+        "languages": {
+          "csharp": {
+            "TP": 2,
+            "FN": 8,
+            "FP": 0,
+            "TN": 20,
+            "unsupported": 0,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 30,
+            "recall": 0.2,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "c": {
+            "TP": 0,
+            "FN": 0,
+            "FP": 0,
+            "TN": 0,
+            "unsupported": 18,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 18,
+            "recall": null,
+            "falsePositiveRate": null,
+            "precision": null
+          }
+        }
+      },
+      {
+        "profile": "project",
+        "languages": {
+          "csharp": {
+            "TP": 2,
+            "FN": 8,
+            "FP": 0,
+            "TN": 20,
+            "unsupported": 0,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 30,
+            "recall": 0.2,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "c": {
+            "TP": 0,
+            "FN": 0,
+            "FP": 0,
+            "TN": 0,
+            "unsupported": 18,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 18,
+            "recall": null,
+            "falsePositiveRate": null,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "developmentApps": {
+      "tier": "previously-exposed-development-apps",
+      "profiles": 18,
+      "allRawFindingIdentitiesUnchanged": true
+    },
+    "realApps": {
+      "profiles": 4,
+      "allRawFindingIdentitiesUnchanged": true,
+      "accuracyScored": false
+    },
+    "hermes": {
+      "archiveSha256": "7fc26cf18d10eaac432dc7b1028b1d176570b23b7a8d9288972e3e886a8fea26",
+      "frozenInventorySha256": "d122abfdeeb20e2634681dd4b9266cdd2e2f6f7e69012e86a5b50ac39d91e806",
+      "rows": [
+        {
+          "variant": "original",
+          "profile": "default",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 19,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "original",
+          "profile": "project",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 19,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "fixed",
+          "profile": "default",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 20,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "fixed",
+          "profile": "project",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 20,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        }
+      ],
+      "accuracyScored": false
+    },
+    "adversarial": {
+      "fixtures": 190,
+      "allUnchanged": true
+    },
+    "targetCodeExecuted": false,
+    "dependenciesInstalled": false,
+    "onlineQueries": false,
+    "limitations": [
+      "Only pre-existing original-policy benchmark unit transitions qualify; generated and new tests do not qualify",
+      "All five generated sets and prior/safe apps are exposed self-authored development data",
+      "Original and localized CVE policies remain separate",
+      "Native C remains unsupported with no TN credit; Rust/Hermes remains partial with no accuracy credit",
+      "Runtime is a single shared-machine guard, not a speedup claim",
+      "Any changed exposed finding requires explicit fresh manual adjudication; helpers never change cases, keys or policies"
+    ]
+  },
+  "campaignInitial": {
+    "schema": "kayfabe-established-precision-verification@1",
+    "status": "frozen-measurement-complete",
+    "measuredAt": "2026-11-06T05:34:31.485Z",
+    "sources": {
+      "before": {
+        "commit": "d9229ffb7a58f0345ee3bd69ad8742d87a51043e",
+        "tree": "5fac53b918e518810f161f687528e8955388b738",
+        "files": 1118,
+        "sourceSha256": "ede98d222ff29599320226b3ce3515246faf83382e19afc09872395bbde7f1d1",
+        "archiveSha256": "2a702f146cb8a923e0797af1903b8252642dc798c302d568176d646b00157ca0",
+        "inventorySha256": "ce169811f54a1eb76224ce94a1fb43c0995f194e15320fff242048f3ee0a7389",
+        "normalizedFiles": 1109
+      },
+      "after": {
+        "commit": "1505974e36f96f1df30823406c708dcc284f4359",
+        "tree": "670db4fb00de40201abc03b3ef179646727f6d26",
+        "files": 1134,
+        "sourceSha256": "5a19e3f84b770c08895f5d2cdf49713fe61b1664d147327b57db48ba462de6a6",
+        "archiveSha256": "5d8d9665aa22f76382c880ea4b3e4487f7bf84749f2ef76ebbf5a83e53540776",
+        "inventorySha256": "30b8ec00e1ea0d28d58596fd5fad802adbbeca6072813fd715b9012032e03687",
+        "normalizedFiles": 1125
+      }
+    },
+    "evaluatorPolicyFilesVerified": 26,
+    "established": {
+      "datasets": {
+        "csharp": {
+          "inputSha256": "6fde14e0e66fbd5fa2f6a58dae4299e6d92f6951b74b9a8ce9b061be5f515c9b",
+          "policy": {
+            "id": "juliet-csharp-testcase-cwe-polarity-regions@1",
+            "sha256": "f0ce86daa6f878ca6209da7d970d561edc6fdedfb2e16bb8d80fccc6550b86db"
+          },
+          "before": {
+            "cases": 59282,
+            "tp": 1036,
+            "fp": 470,
+            "tn": 29131,
+            "fn": 28645,
+            "recall": 0.03490448435025774,
+            "falsePositiveRate": 0.015877841964798488,
+            "precision": 0.6879150066401063
+          },
+          "after": {
+            "cases": 59282,
+            "tp": 1036,
+            "fp": 470,
+            "tn": 29131,
+            "fn": 28645,
+            "recall": 0.03490448435025774,
+            "falsePositiveRate": 0.015877841964798488,
+            "precision": 0.6879150066401063
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "b689cd8b86e7fa3bcf9f73a3789cf19b2e8e51c899a653354b0dbc780b801ac1",
+          "afterReportSha256": "9086f7ad343fa2b8080caf5999fa68a394e484b7ede94f3c92b356d61d6b384f"
+        },
+        "owasp-java": {
+          "inputSha256": "aa8e0b1bdc78551ba2154ba7b65ee62c054cd576e0cd6f6ef90ec87e060e707d",
+          "policy": {
+            "id": "owasp-java-file-cwe@1",
+            "sha256": "ffb169b86694010bdc25d441ed745e70e147614304f00aa4303798931fbc5e82"
+          },
+          "before": {
+            "cases": 2740,
+            "tp": 571,
+            "fp": 287,
+            "tn": 1038,
+            "fn": 844,
+            "recall": 0.40353356890459363,
+            "falsePositiveRate": 0.21660377358490565,
+            "precision": 0.6655011655011654
+          },
+          "after": {
+            "cases": 2740,
+            "tp": 571,
+            "fp": 264,
+            "tn": 1061,
+            "fn": 844,
+            "recall": 0.40353356890459363,
+            "falsePositiveRate": 0.19924528301886793,
+            "precision": 0.6838323353293413
+          },
+          "transitions": {
+            "fpToTn": 23,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "a0762d2734f8ba59137e804a8d29688078020b376ea9e101b789d30291cdfd41",
+          "afterReportSha256": "e71bdf5dc64f5775531a3d1c4e278f5fbf03e0c673deaedf1d1b9cf12a04339b"
+        },
+        "juliet-java": {
+          "inputSha256": "a1f620b0525b3c18048cbdfabda2bf18f1fbec59bd34204eb5b3ea9da8d31905",
+          "policy": {
+            "id": "juliet-java-testcase-cwe-polarity-regions@1",
+            "sha256": "a882b93f704784d1ab29f0e9f26b1298b4a0c1920c79663700678cc1294a18dc"
+          },
+          "before": {
+            "cases": 57649,
+            "tp": 2410,
+            "fp": 1136,
+            "tn": 27632,
+            "fn": 26471,
+            "recall": 0.08344586406287871,
+            "falsePositiveRate": 0.039488320355951054,
+            "precision": 0.679639029892837
+          },
+          "after": {
+            "cases": 57649,
+            "tp": 2410,
+            "fp": 1117,
+            "tn": 27651,
+            "fn": 26471,
+            "recall": 0.08344586406287871,
+            "falsePositiveRate": 0.03882786429365962,
+            "precision": 0.6833002551743691
+          },
+          "transitions": {
+            "fpToTn": 19,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "7b54ebead717ab5ecd68fc69ac424ac82b239723e14c3eccc9f784c573a3495a",
+          "afterReportSha256": "0bd083e97d88466dbf7834ce58861f74e6061bff8f5e82f59050e41270eba74a"
+        },
+        "sard": {
+          "inputSha256": "a2a2ce017a0ae7425b3011b275bb70d9cbbeffe258f03bba2b74f975455e07ec",
+          "policy": {
+            "id": "sard-sarif-location-cwe@1",
+            "sha256": "e601bc944339db397db0f141086673dc22a79519bb101295e0bb0d500565c21e"
+          },
+          "before": {
+            "cases": 20,
+            "tp": 10,
+            "fp": 0,
+            "tn": 0,
+            "fn": 10,
+            "recall": 0.5,
+            "falsePositiveRate": null,
+            "precision": 1
+          },
+          "after": {
+            "cases": 20,
+            "tp": 10,
+            "fp": 0,
+            "tn": 0,
+            "fn": 10,
+            "recall": 0.5,
+            "falsePositiveRate": null,
+            "precision": 1
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "2e66f0066dd35a0156ffb4201df5e5e8541dc7a2d1a4b5fd09fa9ee90ba06ebe",
+          "afterReportSha256": "3a459cacf3aa7dcc971814154eefdcff8343f5b1a7a78be3d69e5818dd9774eb"
+        },
+        "cve-fixes": {
+          "inputSha256": "854acf4a769874fa8cb8b6ace227cc47fd6b5996a8404d649326039e00449734",
+          "policy": {
+            "id": "cve-changed-file-cwe@1",
+            "sha256": "239ff4dc70992458fa6c05d9a6e2f3cb269383625758dcdc9355ee7d60e0512f"
+          },
+          "before": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 1,
+            "tn": 7,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0.125,
+            "precision": 0.5
+          },
+          "after": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 1,
+            "tn": 7,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0.125,
+            "precision": 0.5
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "282eb8a32ed4b31067d5f52de33d6c8ff31bde3c67cb3e5e1d81e1027349fdc7",
+          "afterReportSha256": "d3bc4f474d5e137b440d35ba601c769f688dc2435e38b75bde0affd949d33905",
+          "originalPairs": {
+            "before": {
+              "total": 8,
+              "successful": 0,
+              "rate": 0
+            },
+            "after": {
+              "total": 8,
+              "successful": 0,
+              "rate": 0
+            }
+          },
+          "localized": {
+            "policy": {
+              "id": "cve-fix-region@1",
+              "sha256": "cd9b2afdb597892cd228fb5757c5ca42b71362cb2f4570c95679e5679a952b9c"
+            },
+            "before": {
+              "cases": 16,
+              "tp": 1,
+              "fp": 0,
+              "tn": 8,
+              "fn": 7,
+              "recall": 0.125,
+              "falsePositiveRate": 0,
+              "precision": 1
+            },
+            "after": {
+              "cases": 16,
+              "tp": 1,
+              "fp": 0,
+              "tn": 8,
+              "fn": 7,
+              "recall": 0.125,
+              "falsePositiveRate": 0,
+              "precision": 1
+            },
+            "pairs": {
+              "before": {
+                "total": 8,
+                "successful": 1,
+                "rate": 0.125
+              },
+              "after": {
+                "total": 8,
+                "successful": 1,
+                "rate": 0.125
+              }
+            },
+            "transitions": {
+              "fpToTn": 0,
+              "tpToFn": 0,
+              "tnToFp": 0,
+              "fnToTp": 0
+            }
+          }
+        },
+        "supplied": {
+          "inputSha256": "4828e75960d397b6f286519bebd01c684a1042e0a4c385258a2518f491991a2c",
+          "policy": {
+            "id": null,
+            "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+          },
+          "before": {
+            "cases": 227,
+            "tp": 87,
+            "fp": 11,
+            "tn": 79,
+            "fn": 50,
+            "recall": 0.635036496350365,
+            "falsePositiveRate": 0.12222222222222222,
+            "precision": 0.8877551020408163
+          },
+          "after": {
+            "cases": 227,
+            "tp": 87,
+            "fp": 11,
+            "tn": 79,
+            "fn": 50,
+            "recall": 0.635036496350365,
+            "falsePositiveRate": 0.12222222222222222,
+            "precision": 0.8877551020408163
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "d14350c8966738adc0c42661228899385a02c3a46ad4ffdeafc4f30dc445af84",
+          "afterReportSha256": "a9ddcf165133f214524d11c407aa2ffb58a332e6ed6aedd29b4f908ad28bdcf5"
+        },
+        "dotnet-apps": {
+          "inputSha256": "e5b514512a82a4ce023d7eff8d07876a33ec6a896e0ed420c309183863aa4289",
+          "policy": {
+            "id": null,
+            "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+          },
+          "before": {
+            "cases": 230,
+            "tp": 32,
+            "fp": 1,
+            "tn": 90,
+            "fn": 107,
+            "recall": 0.2302158273381295,
+            "falsePositiveRate": 0.01098901098901099,
+            "precision": 0.9696969696969697
+          },
+          "after": {
+            "cases": 230,
+            "tp": 32,
+            "fp": 1,
+            "tn": 90,
+            "fn": 107,
+            "recall": 0.2302158273381295,
+            "falsePositiveRate": 0.01098901098901099,
+            "precision": 0.9696969696969697
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          },
+          "beforeReportSha256": "14ee899d1dba3a843f35b56497928e21071a07ad8b908ec6e0c1e22cf5afd08a",
+          "afterReportSha256": "c2c06b4c056eea03e48b103a4204a2869833688271860cdc1e088ac963b66019"
+        }
+      },
+      "qualifying": {
+        "fpToTn": 42,
+        "fnToTp": 0,
+        "total": 42,
+        "policy": "Seven established original-policy dataset unit transitions only; localized CVE reported separately, never added to original-policy totals"
+      },
+      "performance": {
+        "beforeMs": 70786,
+        "afterMs": 65634,
+        "ratio": 0.927217246348148,
+        "limit": 1.5,
+        "speedupClaim": false
+      }
+    },
+    "tests": {
+      "total": 1132,
+      "passed": 1129,
+      "failed": 0,
+      "skipped": 3,
+      "cancelled": 0,
+      "todo": 0,
+      "corpusPairs": 209
+    },
+    "selfAudit": {
+      "scope": "production src/, bin/, package.json; fixture/test/docs/agent/workflow directories excluded explicitly; no full-coverage claim",
+      "candidates": 4,
+      "unreviewed": 0,
+      "manualDispositionsReusedByExactFindingAndFileHashes": true
+    },
+    "generated": [
+      {
+        "cycle": 1,
+        "tier": "self-authored-development",
+        "inventorySha256": "cf1642708fc3ce8beaa4888209fa873f954ebc2da91f68f73865a77f8e56c308",
+        "keySha256": "584621d4a3e47aa61c718f2297cc5c8c2bd6dd34b393cb7e06bdad936c01931f",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 5,
+            "tp": 4,
+            "fn": 0,
+            "fp": 1,
+            "quietUncredited": 3,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 5,
+            "tp": 4,
+            "fn": 0,
+            "fp": 1,
+            "quietUncredited": 3,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 7,
+            "tp": 4,
+            "fn": 0,
+            "fp": 3,
+            "quietUncredited": 1,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 7,
+            "tp": 4,
+            "fn": 0,
+            "fp": 3,
+            "quietUncredited": 1,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 2,
+        "tier": "self-authored-development",
+        "inventorySha256": "1694077a233bb30a843186ccacdb3d56f1c4ba30941304eb12957e5567f66505",
+        "keySha256": "f0d2b26327b26b9ac9caa387f9b18ca72e5f4ae00fd5bf7a24b1345e204d51bf",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 8,
+            "tp": 4,
+            "fn": 0,
+            "fp": 4,
+            "quietUncredited": 0,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 3,
+        "tier": "self-authored-development",
+        "inventorySha256": "3c9994e07472b0b22ed4db69023d9bf5d7dfa55d64ddef66e9be6ff2f8e8a29c",
+        "keySha256": "eb590753446b3be9bdda5524458f750915c37de8bbd0cc3f59b92b90d30a3f67",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 4,
+        "tier": "self-authored-development",
+        "inventorySha256": "d848db06c01960e58529d3f267dabe8f5df3fd5021b0a4f73d60033ca255006d",
+        "keySha256": "70621d25876ced300290d2f98da92cc08832d43ec165adb6ca3731f6cba3821e",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      },
+      {
+        "cycle": 5,
+        "tier": "self-authored-development",
+        "inventorySha256": "00a9d8e02c989869bc1f7b0c6ec7c2645aeb985935d4cf55ee73b80e3f0f8e8b",
+        "keySha256": "6e0698ce2dbfd90d8dd4334c27aff1da82b2de095a6167d83cd54591c90c2b0c",
+        "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+        "rows": [
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "default",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          },
+          {
+            "profile": "project",
+            "candidates": 4,
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "quietUncredited": 4,
+            "unmatched": 0
+          }
+        ]
+      }
+    ],
+    "safeOnly": {
+      "keySha256": "22bdfdf0926e28ef80b46507e1499cdafb307549b4e17ec277a7703bf8c5e4fa",
+      "policySha256": "8a8cd38a00d7dbd65abaaa5ca14b425cd479ec7f21378b5d518887acc9954fad",
+      "scorerSha256": "e2b0613acb75f76bfe81478f03d6b82b43ab7b38b3c00d09c4a43850179c4b31",
+      "profiles": [
+        {
+          "profile": "default",
+          "csharp": {
+            "safeCases": 20,
+            "fpCases": 0,
+            "tnCases": 20,
+            "unresolved": 0,
+            "fpRuleEvents": 0,
+            "falsePositiveRate": 0,
+            "suppliedPolicyEventRate": 0,
+            "recall": null
+          },
+          "nativeC": {
+            "unsupported": 12,
+            "tn": 0,
+            "falsePositiveRate": null
+          }
+        },
+        {
+          "profile": "project",
+          "csharp": {
+            "safeCases": 20,
+            "fpCases": 0,
+            "tnCases": 20,
+            "unresolved": 0,
+            "fpRuleEvents": 0,
+            "falsePositiveRate": 0,
+            "suppliedPolicyEventRate": 0,
+            "recall": null
+          },
+          "nativeC": {
+            "unsupported": 12,
+            "tn": 0,
+            "falsePositiveRate": null
+          }
+        }
+      ]
+    },
+    "priorFrozen": [
+      {
+        "profile": "default",
+        "languages": {
+          "csharp": {
+            "TP": 2,
+            "FN": 8,
+            "FP": 0,
+            "TN": 20,
+            "unsupported": 0,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 30,
+            "recall": 0.2,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "c": {
+            "TP": 0,
+            "FN": 0,
+            "FP": 0,
+            "TN": 0,
+            "unsupported": 18,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 18,
+            "recall": null,
+            "falsePositiveRate": null,
+            "precision": null
+          }
+        }
+      },
+      {
+        "profile": "project",
+        "languages": {
+          "csharp": {
+            "TP": 2,
+            "FN": 8,
+            "FP": 0,
+            "TN": 20,
+            "unsupported": 0,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 30,
+            "recall": 0.2,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "c": {
+            "TP": 0,
+            "FN": 0,
+            "FP": 0,
+            "TN": 0,
+            "unsupported": 18,
+            "unscanned": 0,
+            "unresolved": 0,
+            "total": 18,
+            "recall": null,
+            "falsePositiveRate": null,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "developmentApps": {
+      "tier": "previously-exposed-development-apps",
+      "profiles": 18,
+      "allRawFindingIdentitiesUnchanged": true
+    },
+    "realApps": {
+      "profiles": 4,
+      "allRawFindingIdentitiesUnchanged": true,
+      "accuracyScored": false
+    },
+    "hermes": {
+      "archiveSha256": "7fc26cf18d10eaac432dc7b1028b1d176570b23b7a8d9288972e3e886a8fea26",
+      "frozenInventorySha256": "d122abfdeeb20e2634681dd4b9266cdd2e2f6f7e69012e86a5b50ac39d91e806",
+      "rows": [
+        {
+          "variant": "original",
+          "profile": "default",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 19,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "original",
+          "profile": "project",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 19,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "fixed",
+          "profile": "default",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 20,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        },
+        {
+          "variant": "fixed",
+          "profile": "project",
+          "automatedFindings": 0,
+          "dependencies": 265,
+          "rustFilesRecognized": 1,
+          "publicRegistryPackages": 264,
+          "sourceCoverage": "incomplete",
+          "rustAnalyzed": 0,
+          "rustPartial": {
+            "status": "partial",
+            "eligibleFiles": 1,
+            "lexedFiles": 1,
+            "discoveredFunctions": 20,
+            "analyzedFunctions": 0,
+            "resolvedBuilderChains": 0,
+            "moduleScopes": 1,
+            "reachableFiles": 1,
+            "conditionalFiles": 0,
+            "excludedFiles": 0,
+            "unreachableFiles": 0,
+            "cfgExcludedItems": 0,
+            "cfgUnknownItems": 0,
+            "cfgUnknownConditions": 1,
+            "fileRatio": 1,
+            "functionRatio": 0
+          },
+          "cargoStatus": "complete",
+          "severityGatePassed": true,
+          "requiredCoverageGatePassed": false
+        }
+      ],
+      "accuracyScored": false
+    },
+    "adversarial": {
+      "fixtures": 190,
+      "allUnchanged": true
+    },
+    "targetCodeExecuted": false,
+    "dependenciesInstalled": false,
+    "onlineQueries": false,
+    "limitations": [
+      "Only pre-existing original-policy benchmark unit transitions qualify; generated and new tests do not qualify",
+      "All five generated sets and prior/safe apps are exposed self-authored development data",
+      "Original and localized CVE policies remain separate",
+      "Native C remains unsupported with no TN credit; Rust/Hermes remains partial with no accuracy credit",
+      "Runtime is a single shared-machine guard, not a speedup claim",
+      "Any changed exposed finding requires explicit fresh manual adjudication; helpers never change cases, keys or policies"
+    ]
+  },
+  "sourceReviews": [
+    {
+      "reviewedCommit": "1505974e36f96f1df30823406c708dcc284f4359",
+      "verdict": "PASS",
+      "reportSha256": "60f956ff0efec3ad4e2c3a66e8f32822d9272278c231ea37dbbc08cd17a0cf80"
+    },
+    {
+      "reviewedCommit": "1505974e36f96f1df30823406c708dcc284f4359",
+      "verdict": "PASS",
+      "reportSha256": "2e9a28091bbf83c0949d65db5ab19a858cad55c7c1d2dad5675845688fd10599"
+    }
+  ],
+  "changes": [
+    "Read bounded ordinary String-literal class annotation arguments from comment-stripped source aligned with the string mask. Typed metadata tokens preserve header boundaries even when quoted text contains braces, angle brackets or escaped quotes.",
+    "The existing independent-return proof can now handle these class headers. Annotation values are discarded; they establish no safe value, target identity or effect fact. No annotation-name allowlist or change to the helper body, summary schema or renderer is introduced."
+  ],
+  "limits": [
+    "Only leading class annotation markers, empty arguments, one default String literal or unique named String-literal values are supported. Numeric, boolean, char, null, identifier, expression, class, nested or array values remain unknown.",
+    "The ordinary escape subset is bounded; octal, Unicode preprocessing, text blocks and unsupported escapes remain unknown. Existing header/token/annotation and shared proof limits are preserved.",
+    "Caller annotations retain the marker-only grammar. Generic caller/class scope, exact private target/types, opaque references, uncertain String conversions, effect rejection, all-return proof and local-only compatibility boundaries are unchanged.",
+    "This adds header coverage rather than Java type resolution, HTML encoding or output-context knowledge. Safe formatter carriers can still remain findings when their scalar values lack the required provenance.",
+    "The inherited recognized-sink/local-constant enclosing-expression gap remains; no new helper fact enters that compatibility path."
+  ],
+  "reassessment": "The measured header extension removes 22 OWASP false positives without changing recall. The inspected direct SQL helper examples are now quiet; two inspected literal-format carrier examples remain findings. Next, prove every carrier element independently under one shared budget, using only local scalar provenance and the existing pure private helper route. Apply this only to complete current printf statements with genuine context; preserve the old renderer and prior-output replay so no new HTML or later-stream claim is introduced."
+}
