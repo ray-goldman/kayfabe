@@ -20,6 +20,37 @@ const independentServletSource = (body, methods) => `${explicitServletImports}
     }
   }`;
 
+test('literal charAt helper feeds current print and println copy without encoding or replay facts', async t => {
+  const helper = `private String choose(HttpServletRequest request, String input) {
+    String guess = "ABC"; char chosen = guess.charAt(1); String answer;
+    switch (chosen) { case 66: answer = "fixed"; break; default: answer = input; } return answer;
+  }`;
+  for (const kind of ['print', 'println']) {
+    const body = `String selected = choose(request, input); response.getWriter().${kind}(selected.toCharArray());`;
+    const source = independentServletSource(body, helper);
+    assert.ok((await findings(t, '', '', { 'Example.java': source.replace('case 66:', 'case 65:') }))
+      .some(hit => hit.ruleId === 'JAVA-XSS-001'), 'selected tainted copy twin');
+    assert.deepEqual(await findings(t, '', '', { 'Example.java': source }), [], kind);
+    for (const change of [
+      s => s.replace('response.getWriter().', 'if (true) response.getWriter().'),
+      s => s.replace('selected.toCharArray()', 'selected.toCharArray(), input'),
+      s => s.replace('selected.toCharArray()', '(selected).toCharArray()'),
+      s => s.replace('response.getWriter().', 'response.getWriter().print(input); response.getWriter().'),
+    ]) assert.ok((await findings(t, '', '', { 'Example.java': change(source) })).length, 'whole-call/context/sibling controls');
+    const markup = independentServletSource(body + print(escape('input')), helper.replace('"fixed"', '"<script>"'));
+    assert.ok((await findings(t, '', '', { 'Example.java': markup })).length, 'helper output creates no replay knowledge');
+  }
+  const statement = 'response.getWriter().print(selected.toCharArray());';
+  const proof = charCopyProof(statement, { helper });
+  assert.equal(proof.accepts, true);
+  assert.equal(charCopyProof(statement, { helper, request: { windowStart: proof.call.position + 1 } }).accepts, false);
+  for (const prior of ['if (true) response.getWriter().print("<p>");', 'response.getWriter().print("<script>");',
+    'response.getWriter().print("<!--");', 'response.getWriter().print("<a title=\\\"");']) {
+    assert.ok((await findings(t, '', '', { 'Example.java': independentServletSource(prior +
+      'String selected = choose(request, input);' + statement, helper) })).length, prior);
+  }
+});
+
 test('independent char copy print and println admit pure opaque helpers and keep tainted twins', async t => {
   for (const kind of ['print', 'println']) {
     await t.test(kind, async t => {
