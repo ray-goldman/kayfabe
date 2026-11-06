@@ -1,0 +1,7 @@
+{
+  "id": "java-sql-call-precision",
+  "owasp": "A05",
+  "cwe": [89],
+  "description": "Complete SQL calls through arbitrary execute receivers and class-literal metadata require constant SQL; changed request input retains both SQL rules.",
+  "expect": ["JAVA-SQLI-001", "JAVA-SQLI-002"]
+}
