@@ -22,6 +22,216 @@ async function findings(t, source, extra = {}, options = {}) {
 }
 const query = value => `statement.executeQuery("SELECT name FROM users WHERE name='" + ${value} + "'");`;
 
+const literalCharAtBody = (literal = '"ABC"', index = '1', selected = '66') =>
+  `String guess = ${literal}; char chosen = guess.charAt(${index}); String answer;
+   switch (chosen) { case ${selected}: answer = "fixed"; break; default: answer = input; } return answer;`;
+function literalCharAtProof(body = literalCharAtBody(), options = {}, extra = {}) {
+  const { buildJavaProjectIndex } = require('../src/java-project');
+  const { stripComments } = require('../src/languages');
+  const source = independentSource(body, options);
+  const project = buildJavaProjectIndex(Object.entries({ 'Example.java': source, ...extra })
+    .map(([file, raw]) => ({ file, raw, code: stripComments(raw, 'java') })));
+  const filter = project.byFile.get('Example.java').filter, position = source.indexOf('String selected');
+  return { source, project, filter, position,
+    ordinary: context => filter.valueAt('choose(request, response, input)', position, context),
+    bulk: () => filter.independentOutputValuesAt([{ expression: 'selected', position: source.indexOf('statement.executeQuery') }]) };
+}
+
+test('literal charAt proves both opaque routes and exact SQL sinks while selected taint still warns', async t => {
+  for (const options of [{}, { helper: 'private static String choose(Request request, Response response, String input)' }]) {
+    const unsafe = literalCharAtProof(literalCharAtBody('"ABC"', '1', '65'), options);
+    assert.equal(unsafe.ordinary(), false, 'selected tainted arm');
+    assert.equal(unsafe.bulk(), false, 'selected tainted bulk arm');
+    assert.deepEqual((await findings(t, unsafe.source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-001', line: 7 }]);
+    const proof = literalCharAtProof(undefined, options);
+    assert.equal(proof.ordinary(), true, 'ordinary opaque producer');
+    assert.equal(proof.bulk(), true, 'restricted independent output producer');
+    assert.deepEqual(await findings(t, proof.source), []);
+    for (const owner of options.helper ? ['Example.'] : ['this.']) {
+      assert.deepEqual(await findings(t, proof.source.replace('= choose(', `= ${owner}choose(`)), [], owner);
+    }
+  }
+  const assembly = literalCharAtProof(undefined, { sink: 'String sql = "SELECT name FROM users WHERE name=" + selected;\n    statement.executeQuery(sql);' });
+  assert.deepEqual(await findings(t, assembly.source), [], 'independent SQL assembly');
+  assert.deepEqual((await findings(t, assembly.source.replace('case 66:', 'case 65:')))
+    .map(({ ruleId, line }) => ({ ruleId, line })),
+  [{ ruleId: 'JAVA-SQLI-002', line: 7 }, { ruleId: 'JAVA-SQLI-001', line: 8 }], 'tainted assembly twin');
+  for (const sink of [
+    'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected, input);',
+    'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected, new Object[] {input});',
+    'wrapper(jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected), input);',
+    'String result = jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected) + input;',
+  ]) assert.ok((await findings(t, literalCharAtProof(undefined, { sink }).source)).length, sink);
+  assert.deepEqual(await findings(t, literalCharAtProof(undefined, {
+    sink: 'String result = jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + selected, new Object[] {});',
+  }).source), [], 'existing harmless empty SQL metadata');
+});
+
+test('literal charAt uses exact source slices and UTF16 code units', () => {
+  const supported = [
+    ['"ABC"', '0', '65'], ['"ABC"', '2', '67'], ['"😀Z"', '0', '55357'],
+    ['"😀Z"', '1', '56832'], ['"😀Z"', '2', '90'],
+    [String.raw`"\b\t\n\f\r\"\'\\"`, '7', '92'],
+  ];
+  for (const args of supported) {
+    const proof = literalCharAtProof(literalCharAtBody(...args));
+    assert.equal(proof.ordinary(), true, JSON.stringify(args));
+    assert.equal(proof.bulk(), true, JSON.stringify(args));
+  }
+  for (const body of [
+    literalCharAtBody().replace('String guess', '/* String guess = "BAD"; guess.charAt(0); */ final String guess')
+      .replace('guess.charAt(1)', '(guess /* gap */ . /* member */ charAt /* open */ ( /* index */ 1 /* close */ ))'),
+    'String fake = "guess.charAt(0); String guess = BAD; 😀"; ' + literalCharAtBody(),
+    '{ String guess = "BAD"; } ' + literalCharAtBody(),
+    'String guess = "ABC"; if (true) { char ignored = guess.charAt(0); } return "fixed";',
+  ]) assert.equal(literalCharAtProof(body).ordinary(), true, body);
+});
+
+test('literal charAt rejects unsupported values receiver shapes and index syntax in both routes', () => {
+  for (const [literal, index] of [
+    ['""', '0'], ['"ABC"', '3'], ['"ABC"', '2147483648'], ['"ABC"', '-1'],
+    ['"ABC"', '+1'], ['"ABC"', '1L'], ['"ABC"', '0x1'], ['"ABC"', '01'],
+    ['"ABC"', '1.0'], ['"ABC"', '1_0'], ['"ABC"', "'a'"], ['"ABC"', 'chosen'],
+    ['"ABC"', 'input'], ['"ABC"', '(1)'], ['"ABC"', '0 + 1'], ['"ABC"', 'callback()'],
+    [String.raw`"\q"`, '0'], [String.raw`"\101"`, '0'], [String.raw`"\u0041"`, '0'], ['"""ABC"""', '0'],
+  ]) {
+    const proof = literalCharAtProof(literalCharAtBody(literal, index));
+    assert.equal(proof.ordinary(), false, `${literal} ${index}`);
+    assert.equal(proof.bulk(), false, `${literal} ${index}`);
+  }
+  for (const call of ['input.charAt(1)', 'field.charAt(1)', '(guess).charAt(1)', '"ABC".charAt(1)',
+    '((String) guess).charAt(1)', 'this.guess.charAt(1)', 'guess[0].charAt(1)',
+    'guess.substring(1)', 'guess.charAt()', 'guess.charAt(1, 2)', 'guess.charAt(1).toString()',
+    'guess.charAt(1)()', 'guess.charAt(1)[0]', 'guess.char/* split */At(1)']) {
+    const proof = literalCharAtProof(literalCharAtBody().replace('guess.charAt(1)', call));
+    assert.equal(proof.ordinary(), false, call);
+    assert.equal(proof.bulk(), false, call);
+  }
+});
+
+test('literal charAt binds only initialized root locals and defers all syntactic writes', () => {
+  const use = 'char ignored = guess.charAt(1);';
+  const rejected = [
+    `String guess; guess = "ABC"; ${use} return "fixed";`,
+    `String original = "ABC"; String guess = original; ${use} return "fixed";`,
+    ...['null', '("ABC")', '"A" + "BC"', 'true ? "ABC" : "BAD"'].map(init => `String guess = ${init}; ${use} return "fixed";`),
+    `{ String guess = "ABC"; ${use} } return "fixed";`,
+    `{ String guess = "ABC"; } ${use} String guess = "ABC"; return "fixed";`,
+    `if (true) { String guess = "ABC"; ${use} } return "fixed";`,
+    `switch (1) { case 0: String guess = "ABC"; case 1: ${use} break; default: break; } return "fixed";`,
+    `${use} String guess = "ABC"; return "fixed";`,
+    'String guess = guess.charAt(1); return "fixed";',
+    'if (true) String guess = "ABC"; return "fixed";',
+    `String guess = "ABC"; guess = "ABC"; ${use} return "fixed";`,
+    `String guess = "ABC"; ${use} guess = "ABC"; return "fixed";`,
+    `String guess = "ABC"; ${use} if (false) guess = "ABC"; return "fixed";`,
+    `String guess = "ABC"; ${use} if (true) { } else { guess = "ABC"; } return "fixed";`,
+    `String guess = "ABC"; ${use} switch (0) { case 0: break; default: guess = "ABC"; } return "fixed";`,
+    `String guess = "ABC"; ${use} return "fixed"; guess = "ABC";`,
+    `String guess = "ABC"; ${use} guess++; return "fixed";`,
+    `String guess = "ABC"; ${use} (guess) = "ABC"; return "fixed";`,
+  ];
+  for (const body of rejected) {
+    const proof = literalCharAtProof(body);
+    assert.equal(proof.ordinary(), false, body);
+    assert.equal(proof.bulk(), false, body);
+  }
+  const proof = literalCharAtProof(`String guess = "ABC"; String alias = guess; boolean same = alias == guess; ${use} return "fixed";`);
+  assert.equal(proof.ordinary(), true, 'harmless copies do not invalidate the immutable literal receiver');
+});
+
+test('literal charAt requires canonical callee scope and preserves older helper eligibility', () => {
+  for (const [options, extra] of [
+    [{ header: 'import missing.String; class Example' }, {}],
+    [{ header: 'import missing.*; class Example' }, {}],
+    [{ header: 'import static missing.Names.*; class Example' }, {}],
+    [{ header: 'import java.lang.String; import java.lang.String; class Example' }, {}],
+    [{ header: 'import java.lang.String junk; class Example' }, {}],
+    [{ header: 'import missing.java; class Example' }, {}],
+    [{ header: 'class Example<String>' }, {}],
+    [{ helper: 'private <String> String choose(Request request, Response response, String input)' }, {}],
+    [{ header: 'class Example extends Unknown' }, {}],
+    [{ header: 'class Example implements Marker' }, {}],
+    [{}, { 'String.java': 'class String {}' }],
+    [{ header: 'package sample; class Example' }, { 'sample/String.java': 'package sample; class String {}' }],
+    [{}, { 'Object.java': 'package java.lang; public class Object {}' }],
+    [{}, { 'CanonicalString.java': 'package java.lang; public class String {}' }],
+    [{}, { 'java.java': 'class java {}' }],
+    [{ header: 'class Example extends javax.servlet.http.HttpServlet' }, { 'HttpServlet.java': 'package javax.servlet.http; public class HttpServlet {}' }],
+  ]) {
+    const proof = literalCharAtProof(undefined, options, extra);
+    assert.equal(proof.ordinary(), false, JSON.stringify(options));
+    assert.equal(proof.bulk(), false, JSON.stringify(options));
+  }
+  for (const header of ['import java.lang.String; class Example', 'import java /* gap */ . lang . String; class Example',
+    'class Example extends java.lang.Object', 'class Example extends javax.servlet.http.HttpServlet',
+    'import jakarta.servlet.http.HttpServlet; class Example extends HttpServlet']) {
+    assert.equal(literalCharAtProof(undefined, { header }).ordinary(), true, header);
+  }
+  const incomplete = literalCharAtProof();
+  incomplete.project.complete = false;
+  assert.equal(incomplete.ordinary(), false, 'incomplete source inventory');
+  assert.equal(incomplete.bulk(), false);
+  const { constantSinkFilter } = require('../src/java-constants');
+  assert.equal(constantSinkFilter(incomplete.source, () => []).valueAt('choose(request, response, input)', incomplete.position), false, 'absent project');
+  const old = literalCharAtProof('return "fixed";', { header: 'class Example extends Unknown' });
+  assert.equal(old.ordinary(), true, 'old opaque bodies retain existing scope eligibility');
+  assert.equal(old.bulk(), true);
+});
+
+test('literal charAt cannot hide syntactic effects unsafe returns or caller facts', () => {
+  const prefix = 'String guess = "ABC"; char ignored = guess.charAt(1); ';
+  for (const tail of ['if (false) callback(); return "fixed";',
+    'String answer = true ? "fixed" : callback(); return answer;',
+    'switch (0) { case 0: break; default: request.toString(); } return "fixed";',
+    'return "fixed"; field = input;', 'return "fixed"; callback();',
+    'Object danger = new Object(); return "fixed";',
+    'return "fixed"; boolean danger = ("prefix" + input) == "";',
+    'if (false) return input; return "fixed";', 'return input;']) {
+    const proof = literalCharAtProof(prefix + tail);
+    const method = proof.filter.index.methods.find(m => m.name === 'choose');
+    assert.equal(proof.ordinary({ parameterMethod: method.start,
+      parameters: new Map([['input', { known: true, dependencies: [], encodings: [] }]]) }), false, tail);
+    assert.equal(proof.bulk(), false, tail);
+  }
+});
+
+test('literal charAt keeps one cumulative intrinsic allowance and shared proof limits', () => {
+  const simple = literalCharAtProof();
+  assert.equal(simple.ordinary(), true);
+  for (const context of [{ budget: { left: 0, methods: new Set() } },
+    { budget: { left: 100, methods: new Set() } }, { stack: ['a', 'b', 'c', 'd'] },
+    { budget: { left: 10000, methods: new Set(Array.from({ length: 32 }, (_, i) => 'other-' + i)) } }]) {
+    assert.equal(simple.ordinary(context), false);
+  }
+  const budget = { left: 10000, methods: new Set() };
+  assert.equal(simple.ordinary({ budget }), true);
+  const afterFirst = budget.left;
+  assert.equal(simple.ordinary({ budget }), true);
+  assert.ok(budget.left < afterFirst, 'no cross-invocation certificate cache');
+  const uses = count => `String guess = "ABC"; char chosen; ${'chosen = guess.charAt(1);'.repeat(count)} return "fixed";`;
+  assert.equal(literalCharAtProof(uses(2)).ordinary(), true);
+  const cumulativeBudget = { left: 10000, methods: new Set() };
+  assert.equal(literalCharAtProof(uses(120)).ordinary({ budget: cumulativeBudget }), false, 'many small calls do not each receive 512');
+  assert.ok(cumulativeBudget.left > 5000, 'intrinsic allowance exhausts while shared work remains');
+  assert.equal(literalCharAtProof(uses(120)).bulk(), false);
+  const literals = 'char chosen; ' + Array.from({ length: 20 }, (_, i) =>
+    `String guess${i} = "ABC"; ${`chosen = guess${i}.charAt(1);`.repeat(5)}`).join('') + ' return "fixed";';
+  assert.equal(literalCharAtProof(literals).ordinary(), false, 'decoding new literals also shares the one allowance');
+  const failed = literalCharAtProof(literalCharAtBody('"ABC"', '99'));
+  const failedBudget = { left: 10000, methods: new Set() };
+  assert.equal(failed.ordinary({ budget: failedBudget }), false);
+  assert.ok(failedBudget.left < 10000, 'failed evaluation still spends shared work');
+  for (const body of [' '.repeat(50001) + 'return "fixed";',
+    'String guess = "ABC"; ' + Array.from({ length: 65 }, (_, i) => `char x${i};`).join('') + 'return "fixed";',
+    '{'.repeat(65) + literalCharAtBody() + '}'.repeat(65),
+    'String guess = "ABC"; ' + ';'.repeat(4096) + 'return "fixed";']) {
+    assert.equal(literalCharAtProof(body).ordinary(), false, 'existing body bounds');
+  }
+  assert.equal(literalCharAtProof(undefined, { header: '@M("' + 'x'.repeat(4000) + '") class Example' }).ordinary(), false, 'bounded canonical headers');
+});
+
 test('independent owner fix1 rejects imported package prefixes in both opaque proof modes', async t => {
   const { buildJavaProjectIndex } = require('../src/java-project');
   const { stripComments } = require('../src/languages');

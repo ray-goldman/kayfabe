@@ -1,0 +1,7 @@
+{
+  "id": "java-independent-char-at",
+  "owasp": "A05",
+  "cwe": [89],
+  "description": "A canonical immutable root String charAt selects an independent SQL value only when every helper return has local-only provenance.",
+  "expect": ["JAVA-SQLI-001"]
+}

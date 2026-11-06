@@ -54,7 +54,7 @@ function createJavaSummaries({ file, raw, code, project }) {
           --state.budget.left < 0 || state.stack.length >= 4 || state.stack.includes(method.id)) return unknown();
       state.budget.methods.add(method.id);
       if (state.budget.methods.size > 32 || !method.returns.length || method.type !== 'String' ||
-          !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
+          !independentReturnEligible({ index, target, method, call, position, filter, project, budget: state.budget })) return unknown();
       return isolatedReturnFact(target, method, state);
     }
     const encoder = javaEncodingFact({ index, project, expression,
@@ -72,7 +72,7 @@ function createJavaSummaries({ file, raw, code, project }) {
     if (state.budget.methods.size > 32 || !method.returns.length || method.type !== 'String') return unknown();
     const parameters = new Map();
     if (method.parameters.some(p => !['String', 'int', 'boolean', 'char', 'long'].includes(p.type))) {
-      if (state.mode === 'html' || !independentReturnEligible({ index, target, method, call, position, filter, budget: state.budget })) return unknown();
+      if (state.mode === 'html' || !independentReturnEligible({ index, target, method, call, position, filter, project, budget: state.budget })) return unknown();
       return isolatedReturnFact(target, method, state);
     }
     for (let i = 0; i < method.parameters.length; i++) {

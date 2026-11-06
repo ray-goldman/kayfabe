@@ -1,4 +1,5 @@
 'use strict';
+const { evaluate } = require('./java-branches');
 
 // This grammar belongs only to the opaque-reference route. Existing supported
 // summaries deliberately retain their original eligibility and budgets.
@@ -177,35 +178,38 @@ function callerHeader(index, caller, budget) {
 }
 
 // Recognize an effect-free subset rather than assume a constant return means a
-// pure invocation. Calls, member/index access, allocation and unknown syntax all
-// fail. This also protects constant-mode consumers of HTML output facts.
-function localBody(index, method, budget) {
+// pure invocation. Only the separately certified local String.charAt atom may
+// call a method; all other calls/member/index access and unknown effects fail.
+function localBody(index, method, budget, project) {
   const body = index.code.slice(method.start, method.end);
-  if (body.length > 50000) return false;
+  if (body.length > 50000 || index.code.length !== index.mask.length) return false;
   const tokens = [];
-  const token = /\s+|"(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)'|[A-Za-z_]\w*|0[xX][0-9a-fA-F]+[lL]?|\d+[lL]?|>>>|>>|<<|==|!=|<=|>=|&&|\|\||\+\+|--|[{}();?:=+\-*/%<>&|^!~]/gy;
+  const token = /\s+|"(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)'|[A-Za-z_]\w*|0[xX][0-9a-fA-F]+[lL]?|\d+[lL]?|>>>|>>|<<|==|!=|<=|>=|&&|\|\||\+\+|--|[{}();.?:=+\-*/%<>&|^!~]/gy;
   for (let end = 0; end < body.length;) {
     token.lastIndex = end;
     const match = token.exec(body);
     if (!match || tokens.length >= 4096 || --budget.left < 0) return false;
-    if (match[0].trim()) tokens.push(match[0]);
+    if (match[0].trim()) tokens.push({ text: match[0], start: method.start + match.index, end: method.start + token.lastIndex });
     end = token.lastIndex;
   }
-  const parameters = new Map(method.parameters.map(p => [p.name, p.type]));
+  const parameters = new Map(method.parameters.map(p => [p.name, { name: p.name, type: p.type, origin: 'parameter' }]));
   if (parameters.size !== method.parameters.length || method.parameters.some(p => !identifier(p.name))) return false;
   const scopes = [parameters];
   const bound = name => scopes.some(scope => scope.has(name));
-  const bindingType = name => scopes.findLast(scope => scope.has(name))?.get(name);
+  const binding = name => scopes.findLast(scope => scope.has(name))?.get(name);
+  const bindingType = name => binding(name)?.type;
   const scalar = name => supportedTypes.has(bindingType(name));
   let locals = 0;
   const precedence = new Map([['||', 1], ['&&', 2], ['|', 3], ['^', 4], ['&', 5],
     ['==', 6], ['!=', 6], ['<', 7], ['>', 7], ['<=', 7], ['>=', 7],
     ['<<', 8], ['>>', 8], ['>>>', 8], ['+', 9], ['-', 9], ['*', 10], ['/', 10], ['%', 10]]);
   let at = 0;
-  const take = value => tokens[at] === value && (++at, true);
+  const text = (offset = 0) => tokens[at + offset]?.text;
+  const take = value => text() === value && (++at, true);
+  const pending = [];
   function expression(min = 0, depth = 0) {
     if (--budget.left < 0 || depth >= 64) return false;
-    const value = tokens[at++];
+    const atom = tokens[at++], value = atom?.text;
     let reference = false;
     if (['!', '~', '+', '-'].includes(value)) {
       const operand = expression(11, depth + 1);
@@ -219,9 +223,19 @@ function localBody(index, method, budget) {
       // reference is effect-free; implicit conversion may call user toString.
       // Keep the declared uncertainty even after a literal/null assignment.
       reference = bindingType(value) === 'String';
+      if (take('.')) {
+        const receiver = binding(value), close = tokens[at + 3];
+        if (!receiver || receiver.origin !== 'local' || !receiver.root || receiver.type !== 'String' ||
+            receiver.literalStart === undefined || receiver.initializedAfter > atom.start ||
+            !take('charAt') || !take('(') || !/^(?:0|[1-9][0-9]*)$/.test(text() || '')) return false;
+        at++;
+        if (!take(')') || --budget.left < 0) return false;
+        pending.push({ receiver, start: atom.start, end: close.end });
+        reference = false;
+      }
     } else if (!/^(?:"|'|\d)/.test(value || '') && !['true', 'false', 'null'].includes(value)) return false;
-    while (precedence.has(tokens[at]) && precedence.get(tokens[at]) >= min) {
-      const operator = tokens[at++], power = precedence.get(operator);
+    while (precedence.has(text()) && precedence.get(text()) >= min) {
+      const operator = tokens[at++].text, power = precedence.get(operator);
       const right = expression(power + 1, depth + 1);
       if (!right || (reference || right.reference) && !['==', '!='].includes(operator)) return false;
       reference = false; // Equality compares references without conversion.
@@ -241,7 +255,7 @@ function localBody(index, method, budget) {
     if (take(';')) return true;
     if (take('{')) {
       scopes.push(new Map());
-      while (at < tokens.length && tokens[at] !== '}') if (!statement(depth + 1, inSwitch)) return false;
+      while (at < tokens.length && text() !== '}') if (!statement(depth + 1, inSwitch)) return false;
       scopes.pop();
       return !!take('}');
     }
@@ -256,7 +270,7 @@ function localBody(index, method, budget) {
       const selector = expression();
       if (!selector || selector.reference || !take(')') || !take('{')) return false;
       scopes.push(new Map());
-      while (at < tokens.length && tokens[at] !== '}') {
+      while (at < tokens.length && text() !== '}') {
         if (take('case')) { if (!expression() || !take(':')) return false; }
         else if (take('default')) { if (!take(':')) return false; }
         else if (!statement(depth + 1, true)) return false;
@@ -267,24 +281,59 @@ function localBody(index, method, budget) {
     if (take('break')) return inSwitch && !!take(';');
     if (take('return')) return expression() && !!take(';');
     const final = take('final');
-    if (supportedTypes.has(tokens[at])) {
+    if (supportedTypes.has(text())) {
       if (!declarations) return false;
-      const type = tokens[at++];
-      const name = tokens[at++];
+      const type = tokens[at++].text;
+      const nameToken = tokens[at++], name = nameToken?.text;
       if (!identifier(name) || bound(name) || ++locals > 64) return false;
       // No forward/self binding; the local exists only after its initializer.
-      if (take('=') && !expression()) return false;
-      scopes[scopes.length - 1].set(name, type);
-      return !!take(';');
+      const initialized = take('='), begin = at;
+      if (initialized && !expression()) return false;
+      const literal = initialized && at === begin + 1 && /^"/.test(tokens[begin].text) ? tokens[begin] : null;
+      const semicolon = tokens[at];
+      if (!take(';')) return false;
+      const scope = scopes[scopes.length - 1];
+      scope.set(name, { name, type, origin: 'local', scope, declaration: nameToken.start,
+        root: scopes.length === 1 && depth === 0, initializedAfter: semicolon.end,
+        literalStart: literal?.start, literalEnd: literal?.end, writes: 0 });
+      return true;
     }
-    if (final || !scalar(tokens[at++]) || !take('=')) return false;
+    const assigned = binding(tokens[at++]?.text);
+    if (final || !supportedTypes.has(assigned?.type) || !take('=')) return false;
+    assigned.writes++;
     return expression() && !!take(';');
   }
   while (at < tokens.length) if (!statement()) return false;
+  // All arms and even statements after return have now contributed writes.
+  // Certificates remain local to this invocation and never grant return facts.
+  let intrinsicLeft = 512, canonical;
+  function intrinsic(source, resolve) {
+    const allowance = Math.min(intrinsicLeft, budget.left);
+    if (allowance <= 0) return null;
+    const meter = { left: allowance }, result = evaluate(source, resolve, meter);
+    const spent = allowance - meter.left;
+    intrinsicLeft -= spent;
+    budget.left -= spent;
+    return meter.left < 0 || intrinsicLeft < 0 || budget.left < 0 ? null : result;
+  }
+  for (const use of pending) {
+    if (--budget.left < 0 || use.receiver.writes) return false;
+    canonical ??= canonicalStringScope({ index, position: use.start, project, budget });
+    if (!canonical) return false;
+    const receiver = use.receiver;
+    if (!receiver.decoded) {
+      receiver.decoded = intrinsic(index.code.slice(receiver.literalStart, receiver.literalEnd), () => null);
+      if (receiver.decoded?.type !== 'String') return false;
+    }
+    // Decimal syntax alone does not establish int range; the existing evaluator
+    // supplies the int type/range and exact UTF-16 charAt bounds on this slice.
+    const result = intrinsic(index.code.slice(use.start, use.end), name => name === receiver.name ? receiver.decoded : null);
+    if (result?.type !== 'char') return false;
+  }
   return true;
 }
 
-function independentReturnEligible({ index, target, method, call, position, filter, budget }) {
+function independentReturnEligible({ index, target, method, call, position, filter, budget, project }) {
   if (target.index !== index || !method.private || !filter) return false;
   // A dotted owner may resolve through an imported type/value rather than the
   // apparent package. Added opaque proofs accept only local owner syntax.
@@ -307,7 +356,7 @@ function independentReturnEligible({ index, target, method, call, position, filt
     }
     if (filter.typeAt(argument, position) !== parameter.type) return false;
   }
-  return localBody(index, method, budget);
+  return localBody(index, method, budget, project);
 }
 
 // Nominal ownership is required only by new String intrinsic/copy consumers.
@@ -345,6 +394,10 @@ function canonicalStringScope({ index, position, project, budget }) {
   const sourceType = name => project.classes.has(name) ||
     project.classes.has([packageName, name].filter(Boolean).join('.'));
   if (sourceType('String') || sourceType('java') || project.classes.has('java.lang.String')) return false;
+  // Fresh response output needs no servlet superclass. Its qualified response
+  // spelling can still resolve through a source/imported namespace type, so
+  // certify these roots before implicit or explicit Object can return success.
+  if (['javax', 'jakarta'].some(root => sourceType(root) || imports.has(root))) return false;
   if (!parent) return !project.classes.has('java.lang.Object');
   if (!parent.includes('.') && sourceType(parent)) return false;
   const qualified = parent.includes('.') ? parent : imports.get(parent) || (parent === 'Object' ? 'java.lang.Object' : null);
