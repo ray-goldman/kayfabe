@@ -159,6 +159,124 @@ public class String {
   assert.ok(hits.some(hit => hit.file === 'Example.java' && hit.line === 6), 'the custom conversion call retains its current sink warning');
 });
 
+function nullCallbackCopy({ kind = 'print', namespace = 'javax', packageSpelling = '', rootShadow, callback = true,
+  returnExpression = 'null', sourcePackageSpelling } = {}) {
+  const replacements = [
+    [explicitServletImports, (packageSpelling ? `package ${packageSpelling};\n` : '') + explicitServletImports.replaceAll('javax', namespace)],
+    ['String input = request.getParameter("value");', 'int input = request.getParameter("value").length();'],
+  ];
+  const extra = {};
+  if (rootShadow) {
+    replacements.push(['extends HttpServlet', `extends ${namespace}.servlet.http.HttpServlet`]);
+    const rootPackage = rootShadow === 'imported' ? 'evil' : packageSpelling.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s/g, '');
+    if (rootShadow === 'imported') replacements.push(['class Example extends', `import evil.${namespace};\nclass Example extends`]);
+    if (callback) {
+      extra[`${rootPackage.replaceAll('.', '/')}/${namespace}.java`] = `${rootPackage ? `package ${sourcePackageSpelling || rootPackage};` : ''}
+public class ${namespace} { public static class servlet { public static class http {
+  public static class HttpServlet extends p.Base {}
+} } }`;
+      extra['p/Base.java'] = `package p;
+public class Base extends ${namespace}.servlet.http.HttpServlet {
+  public static class String {
+    public static ${namespace}.servlet.http.HttpServletRequest request;
+    public static char[] toCharArray() throws java.io.IOException {
+      request.startAsync().getResponse().getWriter().write(request.getParameter("value"));
+      return new char[0];
+    }
+  }
+}`;
+    }
+  } else if (callback) {
+    extra['sample/app/String.java'] = `package ${sourcePackageSpelling || 'sample.app'};
+public class String {
+  public static ${namespace}.servlet.http.HttpServletRequest request;
+  public static char[] toCharArray() throws java.io.IOException {
+    request.startAsync().getResponse().getWriter().write(request.getParameter("value"));
+    return new char[0];
+  }
+}`;
+  }
+  return charCopyProof(`${callback ? 'String.request = request;\n' : ''}response.getWriter().${kind}(selected.toCharArray());`, {
+    helper: `private String choose(HttpServletRequest request, int input) { return ${returnExpression}; }`, extra,
+    replace: [...replacements, ['protected void doPost(HttpServletRequest request, HttpServletResponse response)',
+      'protected void doPost(HttpServletRequest request, HttpServletResponse response) throws java.io.IOException']],
+  });
+}
+
+test('independent char copy fix1 rejects normalized-package null-helper static callbacks', async t => {
+  const { javaOutputFilter } = require('../src/java-sanitizers');
+  for (const kind of ['print', 'println']) for (const packageSpelling of ['sample.app', 'sample . app', 'sample /* gap */ . app']) {
+    await t.test(kind + ' ' + packageSpelling, async t => {
+      const proof = nullCallbackCopy({ kind, packageSpelling });
+      const position = proof.call.position, line = proof.source.slice(0, position).split('\n').length - 1;
+      const window = proof.source.slice(position, proof.source.indexOf(';', position) + 1);
+      const provenance = proof.filter.independentOutputValuesAt([{ expression: 'selected', position }]);
+      const suppressed = javaOutputFilter({ code: proof.index.code, filter: proof.filter, project: proof.project })(line, window);
+      const hits = await findings(t, '', '', proof.files);
+      const warned = hits.some(hit => hit.file === 'Example.java' && hit.line === line + 1);
+      t.diagnostic(JSON.stringify({ packageSpelling, indexedPackage: proof.index.package, provenance, strict: proof.accepts, suppressed, warned }));
+      assert.equal(provenance, true, 'null helper is independently proved; nominal guard must block the callback');
+      assert.equal(proof.accepts, false, 'custom same-package String cannot receive the new certificate');
+      assert.equal(suppressed, false, 'current output window retains its warning');
+      assert.equal(warned, true, 'scanner retains the initialized static callback sink');
+    });
+  }
+});
+
+test('independent char copy fix1 rejects source and imported servlet leading-type callbacks', async t => {
+  const { javaOutputFilter } = require('../src/java-sanitizers');
+  for (const kind of ['print', 'println']) for (const namespace of ['javax', 'jakarta']) {
+    for (const [rootShadow, packageSpelling] of [['source', ''], ['source', 'sample.app'], ['source', 'sample . app'],
+      ['source', 'sample /* gap */ . app'], ['imported', ''], ['imported', 'sample.app']]) {
+      await t.test([kind, namespace, rootShadow, packageSpelling].join(' '), async t => {
+        const proof = nullCallbackCopy({ kind, namespace, rootShadow, packageSpelling });
+        const position = proof.call.position, line = proof.source.slice(0, position).split('\n').length - 1;
+        const window = proof.source.slice(position, proof.source.indexOf(';', position) + 1);
+        const provenance = proof.filter.independentOutputValuesAt([{ expression: 'selected', position }]);
+        const suppressed = javaOutputFilter({ code: proof.index.code, filter: proof.filter, project: proof.project })(line, window);
+        const hits = await findings(t, '', '', proof.files);
+        const warned = hits.some(hit => hit.file === 'Example.java' && hit.line === line + 1);
+        t.diagnostic(JSON.stringify({ namespace, rootShadow, packageSpelling, provenance, strict: proof.accepts, suppressed, warned }));
+        assert.equal(provenance, true, 'independent null reference cannot prevent a static conversion callback');
+        assert.equal(proof.accepts, false, 'qualified servlet spelling cannot conceal a source type root');
+        assert.equal(suppressed, false, 'current output window retains its warning');
+        assert.equal(warned, true, 'scanner retains the initialized inherited callback sink');
+      });
+    }
+  }
+});
+
+test('independent char copy fix1 preserves canonical twins and rejects source inventory spelling uncertainty', async t => {
+  for (const kind of ['print', 'println']) for (const namespace of ['javax', 'jakarta']) {
+    for (const rootShadow of [undefined, 'source']) for (const packageSpelling of ['', 'sample.app']) {
+      const options = { kind, namespace, packageSpelling, rootShadow, callback: false, returnExpression: '"fixed"' };
+      const safe = nullCallbackCopy(options);
+      assert.equal(safe.accepts, true, [kind, namespace, rootShadow, packageSpelling].join(' '));
+      assert.deepEqual(await findings(t, '', '', safe.files), [], 'genuinely canonical helper twin');
+      const tainted = nullCallbackCopy({ ...options, returnExpression: 'request.getParameter("value")' });
+      assert.equal(tainted.accepts, false, 'tainted helper twin');
+      const line = tainted.source.slice(0, tainted.call.position).split('\n').length;
+      assert.ok((await findings(t, '', '', tainted.files)).some(hit => hit.file === 'Example.java' && hit.line === line));
+    }
+    for (const sourcePackageSpelling of ['sample . app', 'sample /* gap */ . app']) {
+      for (const rootShadow of [undefined, 'source']) {
+        const proof = nullCallbackCopy({ kind, namespace, rootShadow, packageSpelling: 'sample.app', sourcePackageSpelling });
+        assert.equal(proof.accepts, false, 'uncertain source package keys must not hide nominal shadows');
+        const line = proof.source.slice(0, proof.call.position).split('\n').length;
+        assert.ok((await findings(t, '', '', proof.files)).some(hit => hit.file === 'Example.java' && hit.line === line));
+      }
+    }
+    for (const packageSpelling of ['sample . app', 'sample /* gap */ . app']) {
+      const proof = nullCallbackCopy({ kind, namespace, packageSpelling, callback: false, returnExpression: '"fixed"' });
+      assert.equal(proof.accepts, false, 'new scope declines a caller package that disagrees with legacy inventory');
+    }
+  }
+  for (const parent of ['', ' extends Object', ' extends java.lang.Object']) {
+    const proof = charCopyProof(undefined, { replace: [[' extends HttpServlet', parent]] });
+    assert.equal(proof.accepts, true, 'unambiguous canonical Object scope');
+  }
+});
+
 test('independent char copy rejects wrappers arrays slices arguments chains and partial statements', () => {
   const { independentCharCopy } = require('../src/java-independent-char-copy');
   const copy = 'response.getWriter().print(selected.toCharArray())';

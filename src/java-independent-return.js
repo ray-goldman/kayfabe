@@ -319,7 +319,14 @@ function canonicalStringScope({ index, position, project, budget }) {
   const tokens = classHeaderTokens(index, index.mask.indexOf('{'), budget);
   if (!tokens) return false;
   const r = headerReader(tokens), imports = new Map();
-  if (r.take('package') && (!r.name() || !r.take(';'))) return false;
+  let packageName = '';
+  if (r.take('package')) {
+    packageName = r.name();
+    if (!packageName || !r.take(';')) return false;
+  }
+  // The new reader normalizes dotted names, but legacy inventory keys do not.
+  // Decline this certificate rather than search a different package's types.
+  if (packageName !== index.package) return false;
   while (r.take('import')) {
     // Unknown classpaths, member-type imports and malformed declarations cannot
     // establish that an unqualified String denotes java.lang.String.
@@ -336,13 +343,16 @@ function canonicalStringScope({ index, position, project, budget }) {
   // types; the bounded caller reader also excludes method type variables.
   if (!r.done()) return false;
   const sourceType = name => project.classes.has(name) ||
-    project.classes.has([index.package, name].filter(Boolean).join('.'));
+    project.classes.has([packageName, name].filter(Boolean).join('.'));
   if (sourceType('String') || sourceType('java') || project.classes.has('java.lang.String')) return false;
   if (!parent) return !project.classes.has('java.lang.Object');
   if (!parent.includes('.') && sourceType(parent)) return false;
   const qualified = parent.includes('.') ? parent : imports.get(parent) || (parent === 'Object' ? 'java.lang.Object' : null);
+  const root = qualified?.split('.')[0];
+  // A dotted framework spelling can instead name members of a source/imported
+  // root type. Exact full-name absence alone cannot establish package ownership.
   return ['java.lang.Object', 'javax.servlet.http.HttpServlet', 'jakarta.servlet.http.HttpServlet'].includes(qualified) &&
-    !project.classes.has(qualified);
+    !sourceType(root) && !imports.has(root) && !project.classes.has(qualified);
 }
 
 module.exports = { independentReturnEligible, canonicalStringScope };
