@@ -146,6 +146,8 @@ References checked against Java SE25: https://docs.oracle.com/en/java/javase/25/
 
 **Handoff:** Owned corpus paths: corpus/java-independent-printf/{case.json,vuln/Example.java,fixed/Example.java}. Modify existing Java test files only; the full package command stays unchanged. Read the source contracts before coding and ask root if unclear. No type/classpath resolver, pure-body or intrinsic extension belongs here. Save all raw RED/GREEN evidence, including failed intermediate attempts; preserve every original corpus byte across 209 cases. Root owns both exact-head source reviews before freezing, fresh comparisons for all seven benchmarks, compatibility and self-audit, independent publication/privacy review, and exact-head CI before protected merge. The implementer does not scan or score benchmark sources.
 
+**Nested evaluator clarification:** Preserve the existing C2 callee evaluator and its internal per-expression 512 bound. Bulk traversal, eligibility/body gates and child valueAt requests share the same 10,000 context budget and method set without replenishment. This retains the generic callee evaluator allowed above; it does not increase any existing limit.
+
 ## Task 5: repeatable cycle gate and integration
 
 Controller owns orchestration; measurement helper author writes only the new private campaign root. Prior campaigns are immutable. Fresh independent static review of helper changes precedes measurements. Initial baseline d9229ff is frozen and measured afresh, with complete key/source inventories; run offline. Full suite baseline1093/1090pass/3existing Windows skips and corpus206 are floors, confirmed by fresh baseline execution.
