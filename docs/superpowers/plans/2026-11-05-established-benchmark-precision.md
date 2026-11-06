@@ -8,7 +8,7 @@ Native Node >=20; no installed runtime dependencies. Never execute, build, test 
 
 ## Task 1: Extend Java constant SQL proof
 
-Worktree: `C:/Users/regs/Documents/ChatGPT/Bluetooth Scanner/output/claude-safe-apps-2026-10-23/implementation`.
+Use the controller-selected isolated worktree. Its local path is recorded in the private execution ledger.
 
 Modify `src/java-constants.js` and focused Java tests/corpus only, with any minimal engine adjustment justified by the actual interface. First write failing tests, demonstrate RED, implement and demonstrate GREEN, then run the complete test suite and corpus. Record commands, counts and self-review in the report. Commit code and tests; do not push, benchmark or open a PR. No subagents.
 
@@ -41,3 +41,5 @@ Do not use caller-method eligibility alone: a caller without a class literal can
 First demonstrate RED for the two known local-constant safe controls at the existing fixed candidate, then GREEN. Add controls for direct helper calls, local aliases of helper results, private caller-parameter facts, same-file and project cross-file newly class-enabled facts if actually supported, unrelated class literals in a method, later writes, array escape/mutation, metadata syntax and generic execute lookalikes. Use actual supported summary shapes and report any infeasible shape rather than asserting a non-exercised path. Every relevant dynamic control must assert the intended complete SQL finding, not an unrelated warning. Keep safe complete calls/direct assignments provable when local-only fails but ordinary helper proof succeeds.
 
 Run all Java-related unit files and the corpus before committing. The final exact package suite will run in the frozen verifier after both source reviews; do not duplicate a heavy full suite while the prior frozen seven-dataset measurement is running. No packages installed. The controller reviews this task, obtains refreshed whole-branch source approval, freezes a fresh candidate label, and executes Task 2 measurement/integration gates again. Exposed development tuning and all intermediate outcomes must be documented honestly.
+
+Extend the PR-owned `corpus/java-sql-call-precision` vulnerable/fixed pair with the returned/wrapped local-constant safe/request-derived counterpart in a separate method. Preserve the original205 corpus cases and the existing new case's rule expectations. This is self-authored regression coverage only; no frozen benchmark key or policy changes.

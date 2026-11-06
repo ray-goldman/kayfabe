@@ -141,7 +141,9 @@ Follow [the repository instructions](AGENTS.md) when reviewing a target: treat i
 
 ## Accuracy and limits
 
-The regression corpus contains 186 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
+The regression corpus contains 206 vulnerable/fixed pairs written alongside the rules. Its 100% precision and recall detect regressions against those expectations; they do not establish independent detection accuracy.
+
+The latest [established Java precision pass](docs/JAVA-SQL-CALL-PRECISION.md) reduces Java Juliet false positives **1172 → 1136** and OWASP Java **289 → 287**. All seven unchanged keys retain previously detected true positives with no new labeled false positives. Recall and the original CVE-pair result are unchanged; the report documents the remaining legacy SQL-proof gap.
 
 The [.NET command-proof follow-up](docs/DOTNET-COMMAND-PRECISION.md) covers additional constant command forms, unsafe counterparts and the type-resolution blockers behind the remaining Juliet command alerts.
 

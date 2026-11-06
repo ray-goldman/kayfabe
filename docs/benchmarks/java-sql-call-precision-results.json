@@ -1,0 +1,917 @@
+{
+  "schema": "kayfabe-established-precision-results@1",
+  "status": "frozen-measurement-complete",
+  "measuredAt": "2026-11-06T03:01:30.807Z",
+  "sources": {
+    "before": {
+      "commit": "4c683a63591335cc06c18ebdb9b4ca44e36b1db1",
+      "tree": "3454012c9530858e8493188a6379587739f9af75",
+      "files": 1111,
+      "sourceSha256": "b9accd4f839b69c6aa9d6bb516024daf02e9537f21409a01f32d59970704178b",
+      "archiveSha256": "bbe181d3885b1484a8375a4605a70e5d047597e6b8f16749a77502a548944a3b",
+      "inventorySha256": "0c66ca108b4ba63b0d1b0fd8038026918f0efb6b56c81e5b3d441c11658e72cb",
+      "normalizedFiles": 1102
+    },
+    "after": {
+      "commit": "9ca0af02bedc5a4e47238bae83c2e295462dcf93",
+      "tree": "4fb81187e712c9aa9caa211cad1fd3e7e069b3c8",
+      "files": 1116,
+      "sourceSha256": "ede98d222ff29599320226b3ce3515246faf83382e19afc09872395bbde7f1d1",
+      "archiveSha256": "9772520dac2879bbd5b76bfa657737002f6b8063407cda726409566202be6e62",
+      "inventorySha256": "f14c43d22478f9d42a9cbea82d5ee7695acf3ff778f3182ab0ee3e1635a4cb62",
+      "normalizedFiles": 1107
+    }
+  },
+  "evaluatorPolicyFilesVerified": 26,
+  "established": {
+    "datasets": {
+      "csharp": {
+        "inputSha256": "6fde14e0e66fbd5fa2f6a58dae4299e6d92f6951b74b9a8ce9b061be5f515c9b",
+        "policy": {
+          "id": "juliet-csharp-testcase-cwe-polarity-regions@1",
+          "sha256": "f0ce86daa6f878ca6209da7d970d561edc6fdedfb2e16bb8d80fccc6550b86db"
+        },
+        "before": {
+          "cases": 59282,
+          "tp": 1036,
+          "fp": 470,
+          "tn": 29131,
+          "fn": 28645,
+          "recall": 0.03490448435025774,
+          "falsePositiveRate": 0.015877841964798488,
+          "precision": 0.6879150066401063
+        },
+        "after": {
+          "cases": 59282,
+          "tp": 1036,
+          "fp": 470,
+          "tn": 29131,
+          "fn": 28645,
+          "recall": 0.03490448435025774,
+          "falsePositiveRate": 0.015877841964798488,
+          "precision": 0.6879150066401063
+        },
+        "transitions": {
+          "fpToTn": 0,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "af4c972e304ef657292dd1d2de7363737b9098a53979d285afbab6580ff6182c",
+        "afterReportSha256": "ad0f403468cedb4bf15730e3b4e113c200a7f1ebb69276a0fc70e2daff934bdf"
+      },
+      "owasp-java": {
+        "inputSha256": "aa8e0b1bdc78551ba2154ba7b65ee62c054cd576e0cd6f6ef90ec87e060e707d",
+        "policy": {
+          "id": "owasp-java-file-cwe@1",
+          "sha256": "ffb169b86694010bdc25d441ed745e70e147614304f00aa4303798931fbc5e82"
+        },
+        "before": {
+          "cases": 2740,
+          "tp": 571,
+          "fp": 289,
+          "tn": 1036,
+          "fn": 844,
+          "recall": 0.40353356890459363,
+          "falsePositiveRate": 0.2181132075471698,
+          "precision": 0.663953488372093
+        },
+        "after": {
+          "cases": 2740,
+          "tp": 571,
+          "fp": 287,
+          "tn": 1038,
+          "fn": 844,
+          "recall": 0.40353356890459363,
+          "falsePositiveRate": 0.21660377358490565,
+          "precision": 0.6655011655011654
+        },
+        "transitions": {
+          "fpToTn": 2,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "57e6bde187a73f7647f01ae389726b45211a61c4a5b6228a725696aa98c4d28d",
+        "afterReportSha256": "14b376fd9de07666035874b61a56376c712f6ad6f166a13d32f256c59ba916a9"
+      },
+      "juliet-java": {
+        "inputSha256": "a1f620b0525b3c18048cbdfabda2bf18f1fbec59bd34204eb5b3ea9da8d31905",
+        "policy": {
+          "id": "juliet-java-testcase-cwe-polarity-regions@1",
+          "sha256": "a882b93f704784d1ab29f0e9f26b1298b4a0c1920c79663700678cc1294a18dc"
+        },
+        "before": {
+          "cases": 57649,
+          "tp": 2410,
+          "fp": 1172,
+          "tn": 27596,
+          "fn": 26471,
+          "recall": 0.08344586406287871,
+          "falsePositiveRate": 0.04073971078976641,
+          "precision": 0.6728084868788387
+        },
+        "after": {
+          "cases": 57649,
+          "tp": 2410,
+          "fp": 1136,
+          "tn": 27632,
+          "fn": 26471,
+          "recall": 0.08344586406287871,
+          "falsePositiveRate": 0.039488320355951054,
+          "precision": 0.679639029892837
+        },
+        "transitions": {
+          "fpToTn": 36,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "50204f1e3cbeaf6e0c9dd6842d87c747fe9541e93b6893a0b0557a03a2b3ea37",
+        "afterReportSha256": "805865f66f4dac1ea053840c25d87cbbca91f77756a0fec3779d13e64a411a87"
+      },
+      "sard": {
+        "inputSha256": "a2a2ce017a0ae7425b3011b275bb70d9cbbeffe258f03bba2b74f975455e07ec",
+        "policy": {
+          "id": "sard-sarif-location-cwe@1",
+          "sha256": "e601bc944339db397db0f141086673dc22a79519bb101295e0bb0d500565c21e"
+        },
+        "before": {
+          "cases": 20,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "fn": 10,
+          "recall": 0.5,
+          "falsePositiveRate": null,
+          "precision": 1
+        },
+        "after": {
+          "cases": 20,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "fn": 10,
+          "recall": 0.5,
+          "falsePositiveRate": null,
+          "precision": 1
+        },
+        "transitions": {
+          "fpToTn": 0,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "5ab2746d0f949e37e3547c18977d7a9227e85651fc530d66e4fa61c97bffcce6",
+        "afterReportSha256": "242eb0d1695456ab2c368311672c9a75081ef8b5e15ebbc26a5e4aba8933a8fa"
+      },
+      "cve-fixes": {
+        "inputSha256": "854acf4a769874fa8cb8b6ace227cc47fd6b5996a8404d649326039e00449734",
+        "policy": {
+          "id": "cve-changed-file-cwe@1",
+          "sha256": "239ff4dc70992458fa6c05d9a6e2f3cb269383625758dcdc9355ee7d60e0512f"
+        },
+        "before": {
+          "cases": 16,
+          "tp": 1,
+          "fp": 1,
+          "tn": 7,
+          "fn": 7,
+          "recall": 0.125,
+          "falsePositiveRate": 0.125,
+          "precision": 0.5
+        },
+        "after": {
+          "cases": 16,
+          "tp": 1,
+          "fp": 1,
+          "tn": 7,
+          "fn": 7,
+          "recall": 0.125,
+          "falsePositiveRate": 0.125,
+          "precision": 0.5
+        },
+        "transitions": {
+          "fpToTn": 0,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "21051bb8b294e7aa287994e47620ba8adecefc12c073af5d435c5688ca795842",
+        "afterReportSha256": "855bccad8bc542b587fe1aea5b05d6c7960a9c39ee11785c010ad711b05737ef",
+        "originalPairs": {
+          "before": {
+            "total": 8,
+            "successful": 0,
+            "rate": 0
+          },
+          "after": {
+            "total": 8,
+            "successful": 0,
+            "rate": 0
+          }
+        },
+        "localized": {
+          "policy": {
+            "id": "cve-fix-region@1",
+            "sha256": "cd9b2afdb597892cd228fb5757c5ca42b71362cb2f4570c95679e5679a952b9c"
+          },
+          "before": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "after": {
+            "cases": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "recall": 0.125,
+            "falsePositiveRate": 0,
+            "precision": 1
+          },
+          "pairs": {
+            "before": {
+              "total": 8,
+              "successful": 1,
+              "rate": 0.125
+            },
+            "after": {
+              "total": 8,
+              "successful": 1,
+              "rate": 0.125
+            }
+          },
+          "transitions": {
+            "fpToTn": 0,
+            "tpToFn": 0,
+            "tnToFp": 0,
+            "fnToTp": 0
+          }
+        }
+      },
+      "supplied": {
+        "inputSha256": "4828e75960d397b6f286519bebd01c684a1042e0a4c385258a2518f491991a2c",
+        "policy": {
+          "id": null,
+          "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+        },
+        "before": {
+          "cases": 227,
+          "tp": 87,
+          "fp": 11,
+          "tn": 79,
+          "fn": 50,
+          "recall": 0.635036496350365,
+          "falsePositiveRate": 0.12222222222222222,
+          "precision": 0.8877551020408163
+        },
+        "after": {
+          "cases": 227,
+          "tp": 87,
+          "fp": 11,
+          "tn": 79,
+          "fn": 50,
+          "recall": 0.635036496350365,
+          "falsePositiveRate": 0.12222222222222222,
+          "precision": 0.8877551020408163
+        },
+        "transitions": {
+          "fpToTn": 0,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "39d1c778b87b8b544ec9821d08b627487f147df9b993bdfc51e03062346ad38b",
+        "afterReportSha256": "60d94a1f2bc791f966a7caa71dd26dffb85eccb8e28e249e3333346ba2fb4800"
+      },
+      "dotnet-apps": {
+        "inputSha256": "e5b514512a82a4ce023d7eff8d07876a33ec6a896e0ed420c309183863aa4289",
+        "policy": {
+          "id": null,
+          "sha256": "f8f5a2488eb5e399d9d0efed9359192c8035057c2be6eb0d8cc5da0563010d90"
+        },
+        "before": {
+          "cases": 230,
+          "tp": 32,
+          "fp": 1,
+          "tn": 90,
+          "fn": 107,
+          "recall": 0.2302158273381295,
+          "falsePositiveRate": 0.01098901098901099,
+          "precision": 0.9696969696969697
+        },
+        "after": {
+          "cases": 230,
+          "tp": 32,
+          "fp": 1,
+          "tn": 90,
+          "fn": 107,
+          "recall": 0.2302158273381295,
+          "falsePositiveRate": 0.01098901098901099,
+          "precision": 0.9696969696969697
+        },
+        "transitions": {
+          "fpToTn": 0,
+          "tpToFn": 0,
+          "tnToFp": 0,
+          "fnToTp": 0
+        },
+        "beforeReportSha256": "acb5967fb3e34500a08d73641fabace25ce0ff1e1fef973d03b5c0561956cc74",
+        "afterReportSha256": "2cc65e59e046bbc05855227e45e5b291a51160d4f6d895b87e2a7307e37a3d71"
+      }
+    },
+    "qualifying": {
+      "fpToTn": 38,
+      "fnToTp": 0,
+      "total": 38,
+      "policy": "Seven established original-policy dataset unit transitions only; localized CVE reported separately, never added to original-policy totals"
+    },
+    "performance": {
+      "beforeMs": 98489,
+      "afterMs": 98865,
+      "ratio": 1.0038176852237306,
+      "limit": 1.5,
+      "speedupClaim": false
+    }
+  },
+  "tests": {
+    "total": 1093,
+    "passed": 1090,
+    "failed": 0,
+    "skipped": 3,
+    "cancelled": 0,
+    "todo": 0,
+    "corpusPairs": 206
+  },
+  "selfAudit": {
+    "scope": "production src/, bin/, package.json; fixture/test/docs/agent/workflow directories excluded explicitly; no full-coverage claim",
+    "candidates": 4,
+    "unreviewed": 0,
+    "manualDispositionsReusedByExactFindingAndFileHashes": true
+  },
+  "generated": [
+    {
+      "cycle": 1,
+      "tier": "self-authored-development",
+      "inventorySha256": "cf1642708fc3ce8beaa4888209fa873f954ebc2da91f68f73865a77f8e56c308",
+      "keySha256": "584621d4a3e47aa61c718f2297cc5c8c2bd6dd34b393cb7e06bdad936c01931f",
+      "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+      "rows": [
+        {
+          "app": "reporting-service",
+          "profile": "default",
+          "candidates": 5,
+          "tp": 4,
+          "fn": 0,
+          "fp": 1,
+          "quietUncredited": 3,
+          "unmatched": 0
+        },
+        {
+          "app": "reporting-service",
+          "profile": "project",
+          "candidates": 5,
+          "tp": 4,
+          "fn": 0,
+          "fp": 1,
+          "quietUncredited": 3,
+          "unmatched": 0
+        },
+        {
+          "app": "background-job-scheduler",
+          "profile": "default",
+          "candidates": 7,
+          "tp": 4,
+          "fn": 0,
+          "fp": 3,
+          "quietUncredited": 1,
+          "unmatched": 0
+        },
+        {
+          "app": "background-job-scheduler",
+          "profile": "project",
+          "candidates": 7,
+          "tp": 4,
+          "fn": 0,
+          "fp": 3,
+          "quietUncredited": 1,
+          "unmatched": 0
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "tier": "self-authored-development",
+      "inventorySha256": "1694077a233bb30a843186ccacdb3d56f1c4ba30941304eb12957e5567f66505",
+      "keySha256": "f0d2b26327b26b9ac9caa387f9b18ca72e5f4ae00fd5bf7a24b1345e204d51bf",
+      "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+      "rows": [
+        {
+          "app": "SupportDeskUtility",
+          "profile": "default",
+          "candidates": 8,
+          "tp": 4,
+          "fn": 0,
+          "fp": 4,
+          "quietUncredited": 0,
+          "unmatched": 0
+        },
+        {
+          "app": "SupportDeskUtility",
+          "profile": "project",
+          "candidates": 8,
+          "tp": 4,
+          "fn": 0,
+          "fp": 4,
+          "quietUncredited": 0,
+          "unmatched": 0
+        },
+        {
+          "app": "ExportBatchProcessor",
+          "profile": "default",
+          "candidates": 8,
+          "tp": 4,
+          "fn": 0,
+          "fp": 4,
+          "quietUncredited": 0,
+          "unmatched": 0
+        },
+        {
+          "app": "ExportBatchProcessor",
+          "profile": "project",
+          "candidates": 8,
+          "tp": 4,
+          "fn": 0,
+          "fp": 4,
+          "quietUncredited": 0,
+          "unmatched": 0
+        }
+      ]
+    },
+    {
+      "cycle": 3,
+      "tier": "self-authored-development",
+      "inventorySha256": "3c9994e07472b0b22ed4db69023d9bf5d7dfa55d64ddef66e9be6ff2f8e8a29c",
+      "keySha256": "eb590753446b3be9bdda5524458f750915c37de8bbd0cc3f59b92b90d30a3f67",
+      "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+      "rows": [
+        {
+          "app": "maintenance-api",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "maintenance-api",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "document-service",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "document-service",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        }
+      ]
+    },
+    {
+      "cycle": 4,
+      "tier": "self-authored-development",
+      "inventorySha256": "d848db06c01960e58529d3f267dabe8f5df3fd5021b0a4f73d60033ca255006d",
+      "keySha256": "70621d25876ced300290d2f98da92cc08832d43ec165adb6ca3731f6cba3821e",
+      "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+      "rows": [
+        {
+          "app": "telemetry-uploader",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "telemetry-uploader",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "artifact-mirror",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "artifact-mirror",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        }
+      ]
+    },
+    {
+      "cycle": 5,
+      "tier": "self-authored-development",
+      "inventorySha256": "00a9d8e02c989869bc1f7b0c6ec7c2645aeb985935d4cf55ee73b80e3f0f8e8b",
+      "keySha256": "6e0698ce2dbfd90d8dd4334c27aff1da82b2de095a6167d83cd54591c90c2b0c",
+      "policySha256": "2d8ec37c5e36d88bcee2253b11ea8513156f3b927daced2c127f9063128cd357",
+      "rows": [
+        {
+          "app": "webhook-relay",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "webhook-relay",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "backup-client",
+          "profile": "default",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        },
+        {
+          "app": "backup-client",
+          "profile": "project",
+          "candidates": 4,
+          "tp": 4,
+          "fn": 0,
+          "fp": 0,
+          "quietUncredited": 4,
+          "unmatched": 0
+        }
+      ]
+    }
+  ],
+  "safeOnly": {
+    "keySha256": "22bdfdf0926e28ef80b46507e1499cdafb307549b4e17ec277a7703bf8c5e4fa",
+    "policySha256": "8a8cd38a00d7dbd65abaaa5ca14b425cd479ec7f21378b5d518887acc9954fad",
+    "scorerSha256": "e2b0613acb75f76bfe81478f03d6b82b43ab7b38b3c00d09c4a43850179c4b31",
+    "profiles": [
+      {
+        "profile": "default",
+        "csharp": {
+          "safeCases": 20,
+          "fpCases": 0,
+          "tnCases": 20,
+          "unresolved": 0,
+          "fpRuleEvents": 0,
+          "falsePositiveRate": 0,
+          "suppliedPolicyEventRate": 0,
+          "recall": null
+        },
+        "nativeC": {
+          "unsupported": 12,
+          "tn": 0,
+          "falsePositiveRate": null
+        }
+      },
+      {
+        "profile": "project",
+        "csharp": {
+          "safeCases": 20,
+          "fpCases": 0,
+          "tnCases": 20,
+          "unresolved": 0,
+          "fpRuleEvents": 0,
+          "falsePositiveRate": 0,
+          "suppliedPolicyEventRate": 0,
+          "recall": null
+        },
+        "nativeC": {
+          "unsupported": 12,
+          "tn": 0,
+          "falsePositiveRate": null
+        }
+      }
+    ]
+  },
+  "priorFrozen": [
+    {
+      "profile": "default",
+      "languages": {
+        "csharp": {
+          "TP": 2,
+          "FN": 8,
+          "FP": 0,
+          "TN": 20,
+          "unsupported": 0,
+          "unscanned": 0,
+          "unresolved": 0,
+          "total": 30,
+          "recall": 0.2,
+          "falsePositiveRate": 0,
+          "precision": 1
+        },
+        "c": {
+          "TP": 0,
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "unsupported": 18,
+          "unscanned": 0,
+          "unresolved": 0,
+          "total": 18,
+          "recall": null,
+          "falsePositiveRate": null,
+          "precision": null
+        }
+      }
+    },
+    {
+      "profile": "project",
+      "languages": {
+        "csharp": {
+          "TP": 2,
+          "FN": 8,
+          "FP": 0,
+          "TN": 20,
+          "unsupported": 0,
+          "unscanned": 0,
+          "unresolved": 0,
+          "total": 30,
+          "recall": 0.2,
+          "falsePositiveRate": 0,
+          "precision": 1
+        },
+        "c": {
+          "TP": 0,
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "unsupported": 18,
+          "unscanned": 0,
+          "unresolved": 0,
+          "total": 18,
+          "recall": null,
+          "falsePositiveRate": null,
+          "precision": null
+        }
+      }
+    }
+  ],
+  "developmentApps": {
+    "tier": "previously-exposed-development-apps",
+    "profiles": 18,
+    "allRawFindingIdentitiesUnchanged": true
+  },
+  "realApps": {
+    "profiles": 4,
+    "allRawFindingIdentitiesUnchanged": true,
+    "accuracyScored": false
+  },
+  "hermes": {
+    "archiveSha256": "7fc26cf18d10eaac432dc7b1028b1d176570b23b7a8d9288972e3e886a8fea26",
+    "frozenInventorySha256": "d122abfdeeb20e2634681dd4b9266cdd2e2f6f7e69012e86a5b50ac39d91e806",
+    "rows": [
+      {
+        "variant": "original",
+        "profile": "default",
+        "automatedFindings": 0,
+        "dependencies": 265,
+        "rustFilesRecognized": 1,
+        "publicRegistryPackages": 264,
+        "sourceCoverage": "incomplete",
+        "rustAnalyzed": 0,
+        "rustPartial": {
+          "status": "partial",
+          "eligibleFiles": 1,
+          "lexedFiles": 1,
+          "discoveredFunctions": 19,
+          "analyzedFunctions": 0,
+          "resolvedBuilderChains": 0,
+          "moduleScopes": 1,
+          "reachableFiles": 1,
+          "conditionalFiles": 0,
+          "excludedFiles": 0,
+          "unreachableFiles": 0,
+          "cfgExcludedItems": 0,
+          "cfgUnknownItems": 0,
+          "cfgUnknownConditions": 1,
+          "fileRatio": 1,
+          "functionRatio": 0
+        },
+        "cargoStatus": "complete",
+        "severityGatePassed": true,
+        "requiredCoverageGatePassed": false
+      },
+      {
+        "variant": "original",
+        "profile": "project",
+        "automatedFindings": 0,
+        "dependencies": 265,
+        "rustFilesRecognized": 1,
+        "publicRegistryPackages": 264,
+        "sourceCoverage": "incomplete",
+        "rustAnalyzed": 0,
+        "rustPartial": {
+          "status": "partial",
+          "eligibleFiles": 1,
+          "lexedFiles": 1,
+          "discoveredFunctions": 19,
+          "analyzedFunctions": 0,
+          "resolvedBuilderChains": 0,
+          "moduleScopes": 1,
+          "reachableFiles": 1,
+          "conditionalFiles": 0,
+          "excludedFiles": 0,
+          "unreachableFiles": 0,
+          "cfgExcludedItems": 0,
+          "cfgUnknownItems": 0,
+          "cfgUnknownConditions": 1,
+          "fileRatio": 1,
+          "functionRatio": 0
+        },
+        "cargoStatus": "complete",
+        "severityGatePassed": true,
+        "requiredCoverageGatePassed": false
+      },
+      {
+        "variant": "fixed",
+        "profile": "default",
+        "automatedFindings": 0,
+        "dependencies": 265,
+        "rustFilesRecognized": 1,
+        "publicRegistryPackages": 264,
+        "sourceCoverage": "incomplete",
+        "rustAnalyzed": 0,
+        "rustPartial": {
+          "status": "partial",
+          "eligibleFiles": 1,
+          "lexedFiles": 1,
+          "discoveredFunctions": 20,
+          "analyzedFunctions": 0,
+          "resolvedBuilderChains": 0,
+          "moduleScopes": 1,
+          "reachableFiles": 1,
+          "conditionalFiles": 0,
+          "excludedFiles": 0,
+          "unreachableFiles": 0,
+          "cfgExcludedItems": 0,
+          "cfgUnknownItems": 0,
+          "cfgUnknownConditions": 1,
+          "fileRatio": 1,
+          "functionRatio": 0
+        },
+        "cargoStatus": "complete",
+        "severityGatePassed": true,
+        "requiredCoverageGatePassed": false
+      },
+      {
+        "variant": "fixed",
+        "profile": "project",
+        "automatedFindings": 0,
+        "dependencies": 265,
+        "rustFilesRecognized": 1,
+        "publicRegistryPackages": 264,
+        "sourceCoverage": "incomplete",
+        "rustAnalyzed": 0,
+        "rustPartial": {
+          "status": "partial",
+          "eligibleFiles": 1,
+          "lexedFiles": 1,
+          "discoveredFunctions": 20,
+          "analyzedFunctions": 0,
+          "resolvedBuilderChains": 0,
+          "moduleScopes": 1,
+          "reachableFiles": 1,
+          "conditionalFiles": 0,
+          "excludedFiles": 0,
+          "unreachableFiles": 0,
+          "cfgExcludedItems": 0,
+          "cfgUnknownItems": 0,
+          "cfgUnknownConditions": 1,
+          "fileRatio": 1,
+          "functionRatio": 0
+        },
+        "cargoStatus": "complete",
+        "severityGatePassed": true,
+        "requiredCoverageGatePassed": false
+      }
+    ],
+    "accuracyScored": false
+  },
+  "adversarial": {
+    "fixtures": 190,
+    "allUnchanged": true
+  },
+  "targetCodeExecuted": false,
+  "dependenciesInstalled": false,
+  "onlineQueries": false,
+  "limitations": [
+    "Only pre-existing original-policy benchmark unit transitions qualify; generated and new tests do not qualify",
+    "All five generated sets and prior/safe apps are exposed self-authored development data",
+    "Original and localized CVE policies remain separate",
+    "Native C remains unsupported with no TN credit; Rust/Hermes remains partial with no accuracy credit",
+    "Runtime is a single shared-machine guard, not a speedup claim",
+    "Any changed exposed finding requires explicit fresh manual adjudication; helpers never change cases, keys or policies"
+  ],
+  "sourceReviews": [
+    {
+      "kind": "task-source",
+      "commit": "9ca0af02bedc5a4e47238bae83c2e295462dcf93",
+      "verdict": "PASS",
+      "reportSha256": "9382eb6fc887063d82b32f5bf7e6f7864eed78a0fccda33a15e7f350b68b52c6"
+    },
+    {
+      "kind": "whole-branch-source",
+      "commit": "9ca0af02bedc5a4e47238bae83c2e295462dcf93",
+      "verdict": "PASS",
+      "reportSha256": "476434cb850d0dcdd5ef7ab788845df99f6f613c1594e7148ba36def3ca66060"
+    }
+  ],
+  "sqlCwe89": {
+    "owasp-java": {
+      "before": {
+        "cases": 504,
+        "tp": 205,
+        "fp": 116,
+        "tn": 116,
+        "fn": 67
+      },
+      "after": {
+        "cases": 504,
+        "tp": 205,
+        "fp": 114,
+        "tn": 118,
+        "fn": 67
+      }
+    },
+    "juliet-java": {
+      "before": {
+        "cases": 4440,
+        "tp": 1820,
+        "fp": 920,
+        "tn": 1300,
+        "fn": 400
+      },
+      "after": {
+        "cases": 4440,
+        "tp": 1820,
+        "fp": 884,
+        "tn": 1336,
+        "fn": 400
+      }
+    }
+  }
+}
