@@ -50,6 +50,15 @@ the integration repair restores their warnings. Contextual `var` is unresolved
 even with a literal initializer: absence of a local type declaration is not
 closed-compilation evidence about imported or externally declared named types.
 Keyword `string` literal controls remain supported.
+Strict binding contexts also decline files containing identifier escapes or
+Unicode formatting characters outside comments and literal tokens. C# decodes
+those escapes and removes formatting characters during identifier comparison;
+the ASCII lexer does neither, so raw spelling is insufficient binding evidence.
+The bounded physical-source pass includes whitespace gaps (notably embedded
+U+FEFF) and supplementary code points. One leading BOM is allowed. Strings,
+character literals, comments and ordinary `@` identifiers remain inert/supported.
+This file-wide rejection covers helper and field-writer alternatives without
+introducing Unicode normalization or changing the ordinary single-line context.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

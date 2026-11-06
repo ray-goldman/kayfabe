@@ -261,3 +261,75 @@ test('strict and legacy cached proof contexts are independent of query order', (
     for (const line of order) assert.equal(prove(line, 'CS-SQLI-001'), line === 3);
   }
 });
+
+// C# decodes identifier escapes and removes formatting characters. The ASCII
+// lexer cannot bind those spellings, so strict proofs must decline the file.
+const alternativeNames = {
+  escapedStart: '\\u0076alue', escapedMiddle: 'v\\u0061lue', escapedLong: '\\U00000076alue',
+  format200C: 'v\u200calue', format200D: 'v\u200dalue', format2060: 'v\u2060alue',
+  embeddedBom: 'v\ufeffalue', supplementaryFormat: 'v\u{e0001}alue',
+};
+function identityFixture(name, context, eol) {
+  const sql = context === 'sql', value = context === 'helper' ? 'Value(input)' : 'value';
+  const call = sql ? `new SqlCommand("SELECT " +\n ${value}, connection);` : `Process.Start("cmd.exe", "/c " +\n ${value});`;
+  const mutation = `string value = "fixed"; ${name} = input;`;
+  const body = ['helper', 'field'].includes(context) ? call : mutation + '\n ' + call;
+  const member = context === 'helper' ? `private string Value(string input) { ${mutation} return value; }` :
+    context === 'field' ? `private string value; public void Set(string input) { value = "fixed"; ${name} = input; }` : '';
+  const code = `using Microsoft.Data.SqlClient;\nusing System.Diagnostics;\nclass Sample {\n${member}\n void Run(string input, SqlConnection connection) {\n ${body}\n }\n}`.replace(/\n/g, eol);
+  return { code, rule: sql ? 'CS-SQLI-001' : 'CS-CMDI-001', line: code.split('\n').findIndex(line => line.includes(sql ? 'new SqlCommand(' : 'Process.Start(')) };
+}
+for (const [name, spelling] of Object.entries(alternativeNames)) {
+  for (const context of ['sql', 'process', 'helper', 'field']) {
+    for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+      test(`strict identifier identity ${name}/${context}/${ending}`, () => {
+        const { code, line, rule } = identityFixture(spelling, context, eol);
+        assert.equal(createCSharpConstantSinkProof(code)(line, rule), false);
+      });
+    }
+  }
+}
+
+test('engine retains all unsupported identifier writes across strict contexts', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-identifier-identity-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [name, spelling] of Object.entries(alternativeNames)) {
+    for (const context of ['sql', 'process', 'helper', 'field']) {
+      for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+        const { code, line, rule } = identityFixture(spelling, context, eol), file = `${name}-${context}-${ending}.cs`;
+        fs.writeFileSync(path.join(root, file), code);
+        expected.push([file, rule, line + 1]);
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => ['CS-SQLI-001', 'CS-CMDI-001'].includes(f.ruleId)).map(f => [f.file, f.ruleId, f.line]).sort(), expected.sort());
+});
+
+test('strict identity guards preserve inert Unicode, leading BOM and verbatim names', () => {
+  for (const eol of ['\n', '\r\n']) {
+    for (const body of [
+      'string value = "fixed"; /* v\u200calue \\u0076alue */ // v\u2060alue \\U00000076alue\n',
+      'string value = "v\u200calue \\u0076alue";',
+      'string value = @"v\u200dalue \\u0076alue";',
+      'string value = """v\ufeffalue \\u0076alue""";',
+      'string value = "fixed"; char other = \'\u200c\'; char escaped = \'\\u200c\';',
+      'string @value = "fixed";',
+    ]) {
+      for (const [rule, sink] of [['CS-SQLI-001', 'new SqlCommand("SELECT " +\n value, connection);'], ['CS-CMDI-001', 'Process.Start("cmd.exe", "/c " +\n value);']]) {
+        const code = ('\ufeffclass Sample {\n void Run() {\n' + body + '\n' + sink + '\n }\n}').replace(/\n/g, eol);
+        const line = code.split('\n').findIndex(text => text.includes(sink.split('\n')[0]));
+        assert.equal(createCSharpConstantSinkProof(code)(line, rule), true, body);
+      }
+    }
+  }
+});
+
+test('unsupported identifier guard does not contaminate ordinary single-line compatibility', () => {
+  const code = 'class Sample {\n void Run(string input) {\n string value = "fixed"; \\u0076alue = input;\n new SqlCommand("SELECT " + value, connection);\n new SqlCommand("SELECT " +\n value, connection);\n }\n}';
+  for (const order of [[3, 4], [4, 3]]) {
+    const prove = createCSharpConstantSinkProof(code);
+    for (const line of order) assert.equal(prove(line, 'CS-SQLI-001'), line === 3);
+  }
+});

@@ -4,7 +4,7 @@ const { parseCSharp } = require('./parsers/csharp/parser');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { createCSharpValueProof } = require('./csharp-values');
 const { parenthesizedMutationTokens } = require('./csharp-mutations');
-const { hasQueryBindings } = require('./csharp-binding-guards');
+const { hasQueryBindings, hasUnsupportedIdentifierSpelling } = require('./csharp-binding-guards');
 
 const CONSTANT_TYPES = new Set(['string', 'String', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal', 'var']);
 const MAX_METHOD = 50000;
@@ -247,7 +247,7 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse, strictB
 }
 
 function createCSharpConstantSinkProof(code) {
-  let parsed, tokens, proveValue, proveStrictValue;
+  let parsed, tokens, proveValue, proveStrictValue, unsupportedIdentity;
   return (line, ruleId) => {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
@@ -267,6 +267,7 @@ function createCSharpConstantSinkProof(code) {
     // Complete expressions enter the same conservative binding domain as
     // primary owners. Establish it before either direct or scoped acceptance.
     const strictBindings = !!(method.hasPrimaryConstructor || sink.multiline);
+    if (strictBindings && (unsupportedIdentity ??= hasUnsupportedIdentifierSpelling(code, tokens))) return false;
     if (strictBindings && hasQueryBindings(tokens, method)) return false;
     // Both proof paths need the same unique ownership gate. Whole-line
     // containment alone can miss a local function starting on that line.
