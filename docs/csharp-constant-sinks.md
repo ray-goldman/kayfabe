@@ -40,8 +40,34 @@ relevant bindings before proof acceptance, including field/helper fallback.
 This identifies unsupported writes rather than inferring alias values. The
 shared recognizer uses the existing 20,000-token ceiling and a fixed linear
 work budget; malformed or over-budget operands decline proof.
-The ordinary non-primary legacy query/compound-write weaknesses predate this
-ownership change and remain separate backlog work.
+Complete multiline sinks in ordinary methods use this same conservative type,
+mutation and query boundary before either proof path. Scoped fallback uses a
+separate strict model, including helper and field writes, so an unsupported
+callee cannot restore a rejected proof. Ordinary single-line legacy behavior
+remains outside this extension; it is not certified by these guards. The earlier
+multiline extension had exposed those legacy weaknesses to additional candidates;
+the integration repair restores their warnings. Contextual `var` is unresolved
+even with a literal initializer: absence of a local type declaration is not
+closed-compilation evidence about imported or externally declared named types.
+Keyword `string` literal controls remain supported.
+Strict binding contexts also decline files containing identifier escapes or
+Unicode formatting characters outside comments and literal tokens. C# decodes
+those escapes and removes formatting characters during identifier comparison;
+the ASCII lexer does neither, so raw spelling is insufficient binding evidence.
+The bounded physical-source pass includes whitespace gaps (notably embedded
+U+FEFF) and supplementary code points. One leading BOM is allowed. Strings,
+character literals, comments and ordinary `@` identifiers remain inert/supported.
+This file-wide rejection covers helper and field-writer alternatives without
+introducing Unicode normalization or changing the ordinary single-line context.
+The same boundary declines `//` comment spans containing a bare CR, NEL, line
+separator or paragraph separator. C# ends the comment there, but the lexer only
+models LF/CRLF and may have swallowed an ordinary executable write as well as
+an alternative identifier. Merely resuming the physical scan is insufficient.
+Normal LF/CRLF comments, EOF comments, and separators inside literal tokens or
+block comments remain supported; no lexer newline normalization is introduced.
+The scanner supplies original physical source to this strict gate separately
+from its existing comment-stripped candidate/proof input. Otherwise stripping
+would erase precisely the unsupported comment span that needs rejection.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments

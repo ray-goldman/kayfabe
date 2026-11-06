@@ -11,7 +11,7 @@ function sourceLanguage(file) {
 }
 function buildCoverage({files,fileData,skipped,truncated,limits,supply,opts,readFailures=0,osvStatus='not-requested'}) {
   const languages = Object.create(null); let excludedTests=0, excludedVendored=0;
-  const rust={status:'partial',eligibleFiles:0,lexedFiles:0,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,moduleScopes:0,reachableFiles:0,conditionalFiles:0,excludedFiles:0,unreachableFiles:0,cfgExcludedItems:0,cfgUnknownItems:0,cfgUnknownConditions:0,diagnosticCounts:Object.create(null),note:'Bounded module graph, three-state cfg, plain functions and resolved reqwest chains. Target/feature cfg stays unresolved; scanner host settings are not Rust build settings. No macro expansion, custom module paths, trait/type inference, variable builder flow or cross-file taint. Counts do not measure vulnerability recall.'};
+  const rust={status:'partial',eligibleFiles:0,lexedFiles:0,discoveredFunctions:0,analyzedFunctions:0,resolvedBuilderChains:0,moduleScopes:0,reachableFiles:0,conditionalFiles:0,excludedFiles:0,unreachableFiles:0,cfgExcludedItems:0,cfgUnknownItems:0,cfgUnknownConditions:0,diagnosticCounts:Object.create(null),note:'Bounded module graph, three-state cfg, plain functions, resolved reqwest chains and one bounded immutable local handoff. Target/feature cfg stays unresolved; scanner host settings are not Rust build settings. No macro expansion, custom module paths, trait/type inference, general variable builder flow or cross-file taint. Counts do not measure vulnerability recall.'};
   for(const f of files) {
     const lang=sourceLanguage(f.rel);if(!lang)continue;
     if(fileData.get(f.rel)?.vendored){excludedVendored++;continue;}

@@ -94,7 +94,7 @@ function applyCodeRules(file, lang, raw, codeLines, taint, javaProject, scriptPr
   const scriptProof = ['javascript', 'python'].includes(lang) ? scriptSinkFilter(file, scriptProject, callArgs) : null;
   const pathProof = ['java', 'go'].includes(lang) ? pathSinkFilter({ file, lang, raw, code, project: javaProject }) : null;
   const goTaint = lang === 'go' ? goFunctionTaint(code, raw, taint) : null;
-  const csharpConstantSink = lang === 'csharp' ? createCSharpConstantSinkProof(code) : null;
+  const csharpConstantSink = lang === 'csharp' ? createCSharpConstantSinkProof(code, { physicalSource: raw }) : null;
   const domConstantSink = lang === 'javascript' ? createDomConstantProof(raw, file) : null;
   const pythonLogging = lang === 'python' ? createPythonLoggingProof(code, scriptProject) : null;
   const win = (i) => (windows[i] === undefined ? (windows[i] = windowAt(codeLines, i)) : windows[i]);

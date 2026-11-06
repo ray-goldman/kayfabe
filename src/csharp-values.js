@@ -3,6 +3,7 @@
 const { buildDotnetProjectIndex } = require('./dotnet/project-index');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { parenthesizedMutationTokens } = require('./csharp-mutations');
+const { hasQueryBindings, hasUnsupportedIdentifierSpelling } = require('./csharp-binding-guards');
 const SCALARS = new Set(['string', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal']);
 const RESERVED = new Set(('abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while').split(' '));
 const MAX_QUERY_WORK = 65536;
@@ -58,10 +59,15 @@ function argumentLabel(tokens) {
 
 // This proof deliberately accepts a small subset. All syntactic writes count,
 // including branches not selected by the current caller or build configuration.
-function createCSharpValueProof(code, ast) {
+function createCSharpValueProof(code, ast, { strictBindings = false } = {}) {
   const lex = tokenizeCSharp(code);
   if (!ast.complete || lex.errors.length || lex.tokens.length > 20000) return () => false;
   const tokens = lex.tokens, pairs = new Map(), stack = [];
+  // Check the complete file for strict contexts: a field writer or recursive
+  // helper can change a binding under a spelling outside the selected method.
+  const unsupportedIdentity = (strictBindings || ast.methods.some(method => method.hasPrimaryConstructor)) &&
+    hasUnsupportedIdentifierSpelling(code, tokens);
+  if (strictBindings && unsupportedIdentity) return () => false;
   const positions = new Map(tokens.map((token, i) => [token.start, i]));
   for (let i = 0; i < tokens.length; i++) {
     if (['(', '[', '{'].includes(tokens[i].text)) stack.push(i);
@@ -115,8 +121,9 @@ function createCSharpValueProof(code, ast) {
       if(fields.has(name))shadowedFields.add(name);
     }
     for(const name of shadowedFields)fields.get(name).invalid=true;
-    const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(ts) : [];
-    const invalid = !wrappedWrites || method.primaryConstructorUnsupported || method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
+    const strict = strictBindings || method.hasPrimaryConstructor;
+    const wrappedWrites = strict ? parenthesizedMutationTokens(ts) : [];
+    const invalid = !wrappedWrites || strict && (unsupportedIdentity || hasQueryBindings(ts, method)) || method.primaryConstructorUnsupported || method.end - method.start > 50000 || ts.some((t, i) => t.kind === 'interpolated-string' ||
       ['=>', 'ref', 'out', 'foreach', 'fixed', 'unsafe', 'goto', 'is', 'switch'].includes(t.text) ||
       t.text === '(' && pairs.has(positions.get(t.start)) && tokens[pairs.get(positions.get(t.start)) + 1]?.text === '{' &&
       !['if','while','for','switch','catch','using','lock'].includes(ts[i - 1]?.text));
@@ -164,7 +171,7 @@ function createCSharpValueProof(code, ast) {
       const binding = bindingAt(token);
       if (binding && (['++','--','+=','-=','*=','/=','%=','??='].includes(ts[i + 1]?.text) ||
           ['++','--','ref','out'].includes(ts[i - 1]?.text) ||
-          method.hasPrimaryConstructor && ['<<','>>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=' ||
+          strict && ['<<','>>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=' ||
           ['&','|','^','%','<','>'].includes(ts[i + 1]?.text) && ts[i + 2]?.text === '=')) binding.invalid = true;
       if (binding && ts[i + 1]?.text === '=') {
         if (binding.parameter !== undefined) binding.invalid = true;

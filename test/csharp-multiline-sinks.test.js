@@ -40,7 +40,10 @@ for (const eol of ['\n', '\r\n']) {
   });
   test(`nested SQL constructors are selected at new on the candidate line (${label})`, () => {
     assert.equal(proof(' var value = "1";\n new SqlCommand("SELECT " + value, connection); // sink', 'CS-SQLI-001', eol), true);
-    assert.equal(proof(' var value = "1";\n new // sink\n SqlCommand("SELECT " + value, connection);', 'CS-SQLI-001', eol), true);
+    // Single-line var is historical compatibility, not a type-identity proof.
+    // Complete multiline eligibility must not inherit that unsupported claim.
+    assert.equal(proof(' var value = "1";\n new // sink\n SqlCommand("SELECT " + value, connection);', 'CS-SQLI-001', eol), false);
+    assert.equal(proof(' string value = "1";\n new // sink\n SqlCommand("SELECT " + value, connection);', 'CS-SQLI-001', eol), true);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + input, connection).ExecuteReader());', 'CS-SQLI-001', eol), false);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new SqlCommand("SELECT " + input, connection).ExecuteReader()); // sink', 'CS-SQLI-001', eol), false);
     assert.equal(proof(' db.ExecuteSqlRaw("SELECT " + "1", new // sink\n SqlCommand("SELECT " + "2", connection).ExecuteReader());', 'CS-SQLI-001', eol), true);
@@ -173,4 +176,213 @@ test('scanner retains all unsupported-binding twins in both line layouts and end
   }
   const result = await scan(root, { includeTests: true });
   assert.deepEqual(result.findings.filter(f => f.ruleId === 'CS-SQLI-001').map(f => f.file).sort(), expected.sort());
+});
+
+// The complete-expression boundary must not expose weaker ordinary-method
+// binding evidence. Disabling any strict guard restores an unsafe suppression.
+const integrationVariants = {
+  coalesce: { body: 'string value = null; value ??= input;' },
+  wrappedCoalesce: { body: 'string value = null; ((value)) ??= input;' },
+  wrappedPlus: { body: 'string value = "fixed"; (value) += input;' },
+  wrappedRef: { body: 'string value = "fixed"; ref string alias = ref (value); alias = input;' },
+  namedVar: { type: 'var', body: 'var value = "fixed";' },
+  namedString: { type: 'String', body: 'String value = "fixed";' },
+  siblingUnknown: { type: 'Text', body: '{ string value = "unrelated"; } { Text value = "fixed";', tail: '}' },
+  importedString: { prefix: 'using External;\n', body: 'String value = "fixed";' },
+  importedVar: { prefix: 'using External;\n', body: 'var value = "fixed";' },
+  unknownVar: { body: 'var value = "fixed";' },
+  from: { query: 'from value in inputs' },
+  typedFrom: { query: 'from string value in inputs' },
+  escapedFrom: { query: 'from @value in inputs' },
+  join: { query: 'from item in inputs join value in inputs on item equals value' },
+  into: { query: 'from item in inputs select item into value' },
+  literal: { body: 'string value = "fixed";', safe: true },
+  unrelatedMutation: { body: 'string value = "fixed"; string other = null; (other) ??= input;', safe: true },
+  inertQueryText: { body: 'string value = "from item in inputs"; string @from = "ignored"; /* from value in inputs */', safe: true },
+};
+const integrationSinks = {
+  sql: ['CS-SQLI-001', 'new SqlCommand("SELECT " +\n value, connection)'],
+  arguments: ['CS-CMDI-001', 'info.Arguments = "/c " +\n value'],
+  processTwo: ['CS-CMDI-001', 'Process.Start("cmd.exe", "/c " +\n value)'],
+};
+function integrationFixture(variant, call, eol) {
+  const conversion = variant.type ? `class ${variant.type} { public static implicit operator ${variant.type}(string text) { return new ${variant.type}(); } public override string ToString() { return System.Environment.GetEnvironmentVariable("QUERY"); } }\n` : '';
+  const body = variant.query ? `{ string value = "unrelated"; }\n var query = ${variant.query}\n select ${call};\n query.ToList();` : `${variant.body}\n ${call};\n ${variant.tail || ''}`;
+  return (`using Microsoft.Data.SqlClient;\nusing System.Diagnostics;\nusing System.Linq;\n${variant.prefix || ''}${conversion}class Sample {\n void Run(string input, string[] inputs, SqlConnection connection) {\n ${body}\n }\n}`).replace(/\n/g, eol);
+}
+for (const [name, variant] of Object.entries(integrationVariants)) {
+  for (const [sink, [rule, call]] of Object.entries(integrationSinks)) {
+    // A query select must contain an expression; assignment is not a candidate
+    // in this query shape, so query engine coverage uses SQL/Process calls.
+    if (variant.query && sink === 'arguments') continue;
+    for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+      test(`ordinary multiline integration ${name}/${sink}/${ending}`, () => {
+        const code = integrationFixture(variant, call, eol);
+        const line = code.split('\n').findIndex(text => text.includes(call.split('\n')[0]));
+        assert.equal(createCSharpConstantSinkProof(code)(line, rule), !!variant.safe);
+      });
+    }
+  }
+}
+
+test('engine retains unsafe ordinary multiline identities and literal controls', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-multiline-integration-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [name, variant] of Object.entries(integrationVariants)) {
+    for (const [sink, [rule, call]] of Object.entries(integrationSinks)) {
+      if (variant.query && sink === 'arguments') continue;
+      for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+        const file = `${name}-${sink}-${ending}.cs`, code = integrationFixture(variant, call, eol);
+        fs.writeFileSync(path.join(root, file), code);
+        if (!variant.safe) expected.push([file, rule, code.split('\n').findIndex(text => text.includes(call.split('\n')[0])) + 1]);
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => ['CS-CMDI-001', 'CS-SQLI-001'].includes(f.ruleId)).map(f => [f.file, f.ruleId, f.line]).sort(), expected.sort());
+});
+
+test('strict multiline fallback follows mutation and query guards into helpers', () => {
+  for (const body of [
+    'string value = null; (value) ??= System.Environment.GetEnvironmentVariable("QUERY"); return value;',
+    'string value = "fixed"; var query = from item in new[] { "fixed" } select item; return value;',
+  ]) {
+    assert.equal(proof('Process.Start("cmd.exe", "/c " + // sink\n Value());', undefined, '\n', `private string Value() { ${body} }`), false);
+  }
+  assert.equal(proof('Process.Start("cmd.exe", "/c " + // sink\n value);', undefined, '\n',
+    'private string value; public void Set(string input) { (value) ??= input; }'), false);
+});
+
+test('strict and legacy cached proof contexts are independent of query order', () => {
+  const code = 'class Sample {\n void Run(string input) {\n string value = null; (value) ??= input;\n new SqlCommand("SELECT " + value, connection);\n new SqlCommand("SELECT " +\n value, connection);\n }\n}';
+  for (const order of [[3, 4], [4, 3]]) {
+    const prove = createCSharpConstantSinkProof(code);
+    for (const line of order) assert.equal(prove(line, 'CS-SQLI-001'), line === 3);
+  }
+});
+
+// C# decodes identifier escapes and removes formatting characters. The ASCII
+// lexer cannot bind those spellings, so strict proofs must decline the file.
+const alternativeNames = {
+  escapedStart: '\\u0076alue', escapedMiddle: 'v\\u0061lue', escapedLong: '\\U00000076alue',
+  format200C: 'v\u200calue', format200D: 'v\u200dalue', format2060: 'v\u2060alue',
+  embeddedBom: 'v\ufeffalue', supplementaryFormat: 'v\u{e0001}alue',
+};
+function identityFixture(name, context, eol) {
+  const sql = context === 'sql', value = context === 'helper' ? 'Value(input)' : 'value';
+  const call = sql ? `new SqlCommand("SELECT " +\n ${value}, connection);` : `Process.Start("cmd.exe", "/c " +\n ${value});`;
+  const mutation = `string value = "fixed"; ${name} = input;`;
+  const body = ['helper', 'field'].includes(context) ? call : mutation + '\n ' + call;
+  const member = context === 'helper' ? `private string Value(string input) { ${mutation} return value; }` :
+    context === 'field' ? `private string value; public void Set(string input) { value = "fixed"; ${name} = input; }` : '';
+  const code = `using Microsoft.Data.SqlClient;\nusing System.Diagnostics;\nclass Sample {\n${member}\n void Run(string input, SqlConnection connection) {\n ${body}\n }\n}`.replace(/\n/g, eol);
+  return { code, rule: sql ? 'CS-SQLI-001' : 'CS-CMDI-001', line: code.split('\n').findIndex(line => line.includes(sql ? 'new SqlCommand(' : 'Process.Start(')) };
+}
+for (const [name, spelling] of Object.entries(alternativeNames)) {
+  for (const context of ['sql', 'process', 'helper', 'field']) {
+    for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+      test(`strict identifier identity ${name}/${context}/${ending}`, () => {
+        const { code, line, rule } = identityFixture(spelling, context, eol);
+        assert.equal(createCSharpConstantSinkProof(code)(line, rule), false);
+      });
+    }
+  }
+}
+
+test('engine retains all unsupported identifier writes across strict contexts', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-identifier-identity-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [name, spelling] of Object.entries(alternativeNames)) {
+    for (const context of ['sql', 'process', 'helper', 'field']) {
+      for (const [ending, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+        const { code, line, rule } = identityFixture(spelling, context, eol), file = `${name}-${context}-${ending}.cs`;
+        fs.writeFileSync(path.join(root, file), code);
+        expected.push([file, rule, line + 1]);
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => ['CS-SQLI-001', 'CS-CMDI-001'].includes(f.ruleId)).map(f => [f.file, f.ruleId, f.line]).sort(), expected.sort());
+});
+
+test('strict identity guards preserve inert Unicode, leading BOM and verbatim names', () => {
+  for (const eol of ['\n', '\r\n']) {
+    for (const body of [
+      'string value = "fixed"; /* v\u200calue \\u0076alue */ // v\u2060alue \\U00000076alue\n',
+      'string value = "v\u200calue \\u0076alue";',
+      'string value = @"v\u200dalue \\u0076alue";',
+      'string value = """v\ufeffalue \\u0076alue""";',
+      'string value = "fixed"; char other = \'\u200c\'; char escaped = \'\\u200c\';',
+      'string @value = "fixed";',
+    ]) {
+      for (const [rule, sink] of [['CS-SQLI-001', 'new SqlCommand("SELECT " +\n value, connection);'], ['CS-CMDI-001', 'Process.Start("cmd.exe", "/c " +\n value);']]) {
+        const code = ('\ufeffclass Sample {\n void Run() {\n' + body + '\n' + sink + '\n }\n}').replace(/\n/g, eol);
+        const line = code.split('\n').findIndex(text => text.includes(sink.split('\n')[0]));
+        assert.equal(createCSharpConstantSinkProof(code)(line, rule), true, body);
+      }
+    }
+  }
+});
+
+test('unsupported identifier guard does not contaminate ordinary single-line compatibility', () => {
+  const code = 'class Sample {\n void Run(string input) {\n string value = "fixed"; \\u0076alue = input;\n new SqlCommand("SELECT " + value, connection);\n new SqlCommand("SELECT " +\n value, connection);\n }\n}';
+  for (const order of [[3, 4], [4, 3]]) {
+    const prove = createCSharpConstantSinkProof(code);
+    for (const line of order) assert.equal(prove(line, 'CS-SQLI-001'), line === 3);
+  }
+});
+
+const commentSeparators = { CR: '\r', NEL: '\u0085', LS: '\u2028', PS: '\u2029' };
+const commentNames = { escaped: '\\u0076alue', formatting: 'v\u200calue', plain: 'value' };
+function commentFixture(separator, name, context, inert) {
+  const fixture = identityFixture(name, context, '\n');
+  fixture.code = fixture.code.replace(`${name} = input;`, inert ? `/* ignored${separator} ${name} = input; */` : `// ignored${separator} ${name} = input;`);
+  return fixture;
+}
+for (const [separatorName, separator] of Object.entries(commentSeparators)) {
+  for (const [name, spelling] of Object.entries(commentNames)) {
+    for (const context of ['sql', 'process']) {
+      test(`strict comment boundary ${separatorName}/${name}/${context}`, () => {
+        for (const inert of [false, true]) {
+          const { code, line, rule } = commentFixture(separator, spelling, context, inert);
+          assert.equal(createCSharpConstantSinkProof(code)(line, rule), inert);
+        }
+      });
+    }
+  }
+}
+
+test('engine retains writes hidden by unsupported line-comment boundaries', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kayfabe-comment-boundary-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const expected = [];
+  for (const [separatorName, separator] of Object.entries(commentSeparators)) {
+    for (const [name, spelling] of Object.entries(commentNames)) {
+      for (const context of ['sql', 'process']) {
+        for (const inert of [false, true]) {
+          const { code, line, rule } = commentFixture(separator, spelling, context, inert);
+          const file = `${separatorName}-${name}-${context}-${inert}.cs`;
+          fs.writeFileSync(path.join(root, file), code);
+          if (!inert) expected.push([file, rule, line + 1]);
+        }
+      }
+    }
+  }
+  const result = await scan(root, { includeTests: true });
+  assert.deepEqual(result.findings.filter(f => ['CS-SQLI-001', 'CS-CMDI-001'].includes(f.ruleId)).map(f => [f.file, f.ruleId, f.line]).sort(), expected.sort());
+});
+
+test('strict comment boundary preserves LF, CRLF, inert literals and EOF comments', () => {
+  for (const eol of ['\n', '\r\n']) {
+    assert.equal(proof('string value = "fixed"; // inert write: value = input;\n Process.Start("cmd.exe", "/c " + // sink\n value);', undefined, eol), true);
+    assert.equal(proof('string value = "fixed"; // comment\n value = input;\n Process.Start("cmd.exe", "/c " + // sink\n value);', undefined, eol), false);
+  }
+  for (const separator of Object.values(commentSeparators)) {
+    assert.equal(proof(`string value = @"inert${separator}value = input;";\n Process.Start("cmd.exe", "/c " + // sink\n value);`), true);
+  }
+  const code = 'class Sample {\n void Run() {\n Process.Start("cmd.exe", "/c " +\n "status");\n }\n} // comment at EOF';
+  assert.equal(createCSharpConstantSinkProof(code)(2, 'CS-CMDI-001'), true);
+  assert.equal(createCSharpConstantSinkProof(code.replace('// comment at EOF', '/* unterminated'))(2, 'CS-CMDI-001'), false);
 });

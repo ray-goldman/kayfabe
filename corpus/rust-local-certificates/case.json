@@ -1,0 +1,7 @@
+{
+  "id": "rust-local-certificates",
+  "owasp": "A04",
+  "cwe": [295],
+  "description": "One immutable resolved reqwest builder retains unsafe certificate state across a local handoff; the fixed consuming chain resets validation. Self-authored regression only.",
+  "expect": ["RUST-TLS-001"]
+}

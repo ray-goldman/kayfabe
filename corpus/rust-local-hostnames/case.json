@@ -1,0 +1,7 @@
+{
+  "id": "rust-local-hostnames",
+  "owasp": "A04",
+  "cwe": [297],
+  "description": "One immutable resolved reqwest builder selects native TLS after a hostname flag; the fixed consuming chain restores hostname validation. Self-authored regression only.",
+  "expect": ["RUST-TLS-002"]
+}

@@ -4,6 +4,7 @@ const { parseCSharp } = require('./parsers/csharp/parser');
 const { tokenizeCSharp } = require('./parsers/csharp/lexer');
 const { createCSharpValueProof } = require('./csharp-values');
 const { parenthesizedMutationTokens } = require('./csharp-mutations');
+const { hasQueryBindings, hasUnsupportedIdentifierSpelling } = require('./csharp-binding-guards');
 
 const CONSTANT_TYPES = new Set(['string', 'String', 'char', 'int', 'long', 'short', 'byte', 'bool', 'float', 'double', 'decimal', 'var']);
 const MAX_METHOD = 50000;
@@ -16,22 +17,6 @@ function methodComplete(parsed, method) {
     error.code === 'unsupported-constructor-header' && Number.isInteger(error.ownerStart) && Number.isInteger(error.ownerEnd) &&
     error.ownerStart >= 0 && error.ownerEnd > error.ownerStart &&
     (method.end <= error.ownerStart || method.start >= error.ownerEnd));
-}
-
-// Query range variables need their own binding scopes. Decline the bounded
-// query-start shape before either proof path can borrow a local/field/helper.
-// Exact token spelling keeps escaped identifiers, comments and strings inert.
-function hasQueryBindings(tokens, method) {
-  const typePunctuation = new Set(['.', '::', '<', '>', '>>', '[', ']', '?', ',', '(', ')']);
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].start <= method.bodyStart || tokens[i].end >= method.bodyEnd || tokens[i].text !== 'from') continue;
-    for (let j = i + 1; j < tokens.length && tokens[j].end < method.bodyEnd; j++) {
-      if (tokens[j].text === 'in' && tokens[j - 1].kind === 'identifier') return true;
-      if (tokens[j].kind !== 'identifier' && !typePunctuation.has(tokens[j].text)) break;
-      if (j - i >= 256) return true;
-    }
-  }
-  return false;
 }
 
 function splitAtTopLevel(tokens, delimiter) {
@@ -141,7 +126,7 @@ function parseLocalDeclarations(tokens, strictTypes = false) {
     let previous = i - 1;
     while (previous >= 0 && ['?', ']', '['].includes(tokens[previous].text)) previous--;
     const type = tokens[previous]?.text;
-    // The newly eligible primary-owner domain cannot infer contextual var or
+    // Newly eligible proof domains cannot infer contextual var or
     // imported String identity. Keep unsupported declarations in the inventory
     // as invalid, so a same-named sibling literal cannot supply their evidence.
     const invalid = strictTypes && (previous !== i - 1 || ['var', 'String'].includes(type) || !CONSTANT_TYPES.has(type) || tokens[previous - 1]?.text === '.');
@@ -180,7 +165,7 @@ function proveExpression(tokens, declarations, assignments, parameters, visiting
   return false;
 }
 
-function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
+function directConstantSink({ code, line, ruleId, parsed: suppliedParse, strictBindings }) {
   if (typeof code !== 'string' || !Number.isInteger(line) || line < 0 || code.length > 2 * 1024 * 1024 ||
       !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
   if (/\busing\s+(?:String|var)\s*=/.test(code)) return false;
@@ -198,10 +183,10 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   const lexed = tokenizeCSharp(code.slice(method.start, method.end));
   if (lexed.errors.length || lexed.tokens.some(token => token.kind === 'interpolated-string')) return false;
   const tokens = lexed.tokens;
-  const wrappedWrites = method.hasPrimaryConstructor ? parenthesizedMutationTokens(tokens) : [];
+  const wrappedWrites = strictBindings ? parenthesizedMutationTokens(tokens) : [];
   if (!wrappedWrites) return false;
   const methodParams = new Set([...(method.parameters || []), ...(method.primaryConstructorParameters || [])].map(parameter => parameter.name));
-  const declarations = parseLocalDeclarations(tokens, method.hasPrimaryConstructor);
+  const declarations = parseLocalDeclarations(tokens, strictBindings);
   const assignments = new Map();
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i], name = token.text.replace(/^@/, '');
@@ -246,7 +231,7 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
     const name = tokens[i].kind === 'identifier' ? tokens[i].text.replace(/^@/, '') : null;
     if (!name || !relevant.has(name)) continue;
     if (['++', '--', '+=', '-=', '*=', '/=', '%='].includes(tokens[i + 1]?.text) || ['++', '--'].includes(tokens[i - 1]?.text) ||
-        ['ref', 'out'].includes(tokens[i - 1]?.text) || method.hasPrimaryConstructor &&
+        ['ref', 'out'].includes(tokens[i - 1]?.text) || strictBindings &&
         (tokens[i + 1]?.text === '??=' || ['%', '&', '|', '^', '<<', '>>'].includes(tokens[i + 1]?.text) && tokens[i + 2]?.text === '=')) return false;
     if (tokens[i + 1]?.text === '=>' && tokens.slice(i + 2).some(token => token.kind === 'identifier' && relevant.has(token.text.replace(/^@/, '')))) return false;
   }
@@ -261,8 +246,8 @@ function directConstantSink({ code, line, ruleId, parsed: suppliedParse }) {
   return expression.every(value => proveExpression(value, declarations, assignments, methodParams));
 }
 
-function createCSharpConstantSinkProof(code) {
-  let parsed, tokens, proveValue;
+function createCSharpConstantSinkProof(code, { physicalSource = code } = {}) {
+  let parsed, tokens, physicalTokens, proveValue, proveStrictValue, unsupportedIdentity;
   return (line, ruleId) => {
     if (typeof code !== 'string' || code.length > 2 * 1024 * 1024 || !Number.isInteger(line) || line < 0 ||
         !['CS-CMDI-001', 'CS-SQLI-001'].includes(ruleId)) return false;
@@ -276,16 +261,29 @@ function createCSharpConstantSinkProof(code) {
     const method = methods[0];
     if (!methodComplete(parsed, method)) return false;
     if (method.primaryConstructorUnsupported) return false;
-    if (method.hasPrimaryConstructor) {
-      tokens ||= tokenizeCSharp(code).tokens;
-      if (hasQueryBindings(tokens, method)) return false;
-    }
-    // Both proof paths need the same unique ownership gate. Whole-line
-    // containment alone can miss a local function starting on that line.
-    if (directConstantSink({ code, line, ruleId, parsed })) return true;
     tokens ||= tokenizeCSharp(code).tokens;
     const sink = sinkExpression(tokens, ruleId, start, end, method.start, method.end);
     if (!sink?.expressions.length) return false;
+    // Complete expressions enter the same conservative binding domain as
+    // primary owners. Establish it before either direct or scoped acceptance.
+    const strictBindings = !!(method.hasPrimaryConstructor || sink.multiline);
+    if (strictBindings) {
+      // The engine's candidate stream has comments stripped. Retain original
+      // physical spans for this gate without changing legacy proof input.
+      if (typeof physicalSource !== 'string' || physicalSource.length > 2 * 1024 * 1024) return false;
+      physicalTokens ||= physicalSource === code ? tokens : tokenizeCSharp(physicalSource).tokens;
+      if (unsupportedIdentity ??= hasUnsupportedIdentifierSpelling(physicalSource, physicalTokens)) return false;
+    }
+    if (strictBindings && hasQueryBindings(tokens, method)) return false;
+    // Both proof paths need the same unique ownership gate. Whole-line
+    // containment alone can miss a local function starting on that line.
+    if (directConstantSink({ code, line, ruleId, parsed, strictBindings })) return true;
+    if (strictBindings) {
+      // Separate models prevent query order from weakening a strict proof or
+      // silently changing the legacy ordinary single-line compatibility path.
+      proveStrictValue ||= createCSharpValueProof(code, parsed, { strictBindings: true });
+      return sink.expressions.every(value => proveStrictValue(value));
+    }
     proveValue ||= createCSharpValueProof(code, parsed);
     return sink.expressions.every(value => proveValue(value));
   };
