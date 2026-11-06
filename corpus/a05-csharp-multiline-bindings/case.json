@@ -1,0 +1,7 @@
+{
+  "id": "a05-csharp-multiline-bindings",
+  "owasp": "A05",
+  "cwe": [78, 89],
+  "description": "Ordinary multiline sinks retain unknown values after wrapped writes; fixed keyword-string commands remain constant.",
+  "expect": ["CS-SQLI-001", "CS-CMDI-001"]
+}

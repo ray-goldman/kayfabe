@@ -40,8 +40,16 @@ relevant bindings before proof acceptance, including field/helper fallback.
 This identifies unsupported writes rather than inferring alias values. The
 shared recognizer uses the existing 20,000-token ceiling and a fixed linear
 work budget; malformed or over-budget operands decline proof.
-The ordinary non-primary legacy query/compound-write weaknesses predate this
-ownership change and remain separate backlog work.
+Complete multiline sinks in ordinary methods use this same conservative type,
+mutation and query boundary before either proof path. Scoped fallback uses a
+separate strict model, including helper and field writes, so an unsupported
+callee cannot restore a rejected proof. Ordinary single-line legacy behavior
+remains outside this extension; it is not certified by these guards. The earlier
+multiline extension had exposed those legacy weaknesses to additional candidates;
+the integration repair restores their warnings. Contextual `var` is unresolved
+even with a literal initializer: absence of a local type declaration is not
+closed-compilation evidence about imported or externally declared named types.
+Keyword `string` literal controls remain supported.
 
 `Process.Start` supports one or two arguments and requires both the executable and
 argument text to be proved constant. `.Arguments` and `.CommandText` assignments
