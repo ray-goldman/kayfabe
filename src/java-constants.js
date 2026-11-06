@@ -1,31 +1,8 @@
 'use strict';
 const { maskStrings } = require('./languages');
+const { sqlAuxiliaryMetadata, maskEmptyObjectArrayInitializers } = require('./java-sql-metadata');
 const { evaluate, excludedBranches } = require('./java-branches');
 const { createJavaSummaries, isSafeFact } = require('./java-summaries');
-
-// JLS 15.8.2: a class literal has a type name (or primitive type), optional
-// array dimensions, and .class. It evaluates no receiver/call or initializer
-// (JLS 12.4.1). This is auxiliary SQL metadata only, never a String fact.
-function classLiteralMetadata(expression) {
-  if (expression.length > 4000) return false;
-  const tokens = expression.match(/[A-Za-z_$][\w$]*|\S/g) || [];
-  if (tokens.pop() !== 'class' || tokens.pop() !== '.' || !tokens.length) return false;
-  if (tokens[0] === 'void') return tokens.length === 1;
-  const typeName = name => /^[A-Za-z_$][\w$]*$/.test(name || '') &&
-    !/^(?:_|abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|var|yield|record|sealed|permits)$/.test(name);
-  let index = 1;
-  if (!/^(?:boolean|byte|short|int|long|char|float|double)$/.test(tokens[0])) {
-    if (!typeName(tokens[0])) return false;
-    while (tokens[index] === '.') {
-      if (!typeName(tokens[index + 1])) return false;
-      index += 2;
-    }
-  }
-  while (index < tokens.length) {
-    if (tokens[index++] !== '[' || tokens[index++] !== ']') return false;
-  }
-  return true;
-}
 
 // This is a bounded proof for local String values, not a Java parser. Unknown
 // syntax retains the warning. Inspect all writes, including writes after a sink
@@ -73,7 +50,7 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       while (before >= 0 && /\s/.test(mask[before])) before--;
       return m[0] !== 'class' || mask[before] !== '.';
     });
-    if (nestedDeclaration || /\bnew\b[^;]*\{/.test(mask)) {
+    if (nestedDeclaration || /\bnew\b[^;]*\{/.test(maskEmptyObjectArrayInitializers(body, mask))) {
       return unknown();
     }
     // Each brace block has its own bindings. The position map makes references
@@ -352,7 +329,7 @@ function constantSinkFilter(code, callArgs, raw = code, options = {}) {
       if (stack.length) return false;
       const args = callArgs(code.slice(pos, end), match[0].length);
       if (!args.length || !args.every((arg, index) =>
-        proof(method)(arg, new Set(), pos - method.start) || index > 0 && classLiteralMetadata(arg))) return false;
+        proof(method)(arg, new Set(), pos - method.start) || index > 0 && sqlAuxiliaryMetadata(arg))) return false;
       // Restore only original local-constant call coverage. Each argument gets
       // a fresh bounded proof with both summary entry points disabled through
       // all recursive aliases/arrays/splits. Ordinary proof above still permits

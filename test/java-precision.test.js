@@ -863,3 +863,142 @@ test('a legacy call never exempts a new call or a dynamic neighboring assembly i
       [{ ruleId: 'JAVA-SQLI-002', line: 3 }], statement);
   }
 });
+
+test('exact empty Object array metadata proves constant SQL and preserves changed-input findings', async t => {
+  for (const metadata of ['new Object[]{}', 'new java.lang.Object[]{}', 'new Object [ ] { }', 'new java . lang . Object [ ] {\n }']) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed";
+      jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, ${metadata}, String.class);
+    } }`;
+    assert.deepEqual(await findings(t, source), [], metadata);
+    assert.deepEqual(await findings(t, source.replace('jdbcTemplate.queryForObject', 'sqlStatement.execute')), [], metadata);
+    const changed = source.replace('String data = "fixed";', 'String data = request.getParameter("x");');
+    assert.deepEqual((await findings(t, changed)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-001', line: 3 }], metadata);
+    assert.deepEqual((await findings(t, changed.replace('jdbcTemplate.queryForObject', 'sqlStatement.execute')))
+      .map(({ ruleId, line }) => ({ ruleId, line })), [{ ruleId: 'JAVA-SQLI-002', line: 3 }], metadata);
+  }
+});
+
+test('empty Object metadata never accepts populated arrays, aliases, casts or accesses', async t => {
+  for (const metadata of [
+    'new Object[]{"literal"}', "new Object[]{'x'}", 'new Object[]{input}', 'new Object[]{load()}',
+    'new Object[]{new Object[]{}}', 'new String[]{}', 'new Object[0]', 'new Object[][]{}',
+    'new other.Object[]{}', 'new Object[]{}[0]', '(new Object[]{})', '(Object[]) new Object[]{}',
+    'choose(new Object[]{})', 'new Object[]{} + input', 'metadata',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed"; String input = request.getParameter("x"); Object[] metadata = new Object[]{};
+      sqlStatement.execute("SELECT name FROM users WHERE name=" + data, ${metadata}, String.class);
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], metadata);
+  }
+});
+
+test('empty Object metadata retains SQL writes, escapes and nested declaration guards', async t => {
+  for (const setup of [
+    'String data = "fixed"; data = request.getParameter("x");',
+    'String[] values = "a-b".split("-"); String data = values[0]; values[0] = request.getParameter("x");',
+    'String[] values = "a-b".split("-"); String data = values[0]; mutate(values);',
+    'String[] values = "a-b".split("-"); String[] alias = values; String data = values[0];',
+    'class Local {} String data = "fixed";',
+    'Object nested = new Object() {}; String data = "fixed";',
+    'Object nested = new Object() { Object[] member = new Object[]{}; }; String data = "fixed";',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      ${setup}
+      sqlStatement.execute("SELECT name FROM users WHERE name=" + data, new Object[]{}, String.class);
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], setup);
+  }
+});
+
+test('populated Object literal and char initializers retain the old whole-method guard', async t => {
+  for (const initializer of ['new Object[]{"literal"}', "new Object[]{'x'}", 'new Object[]{"new Object[]{}"}']) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      Object[] unrelated = ${initializer}; String data = "fixed";
+      sqlStatement.execute("SELECT name FROM users WHERE name=" + data, new Object[]{}, String.class);
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], initializer);
+  }
+});
+
+test('quoted empty metadata text does not alter constructor or compatibility guards', async t => {
+  const source = `class Example { String data = request.getParameter("outer"); String run() {
+    String text = "new Object[]{}"; String data = "fixed";
+    return jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data);
+  } }`;
+  assert.deepEqual(await findings(t, source), []);
+});
+
+test('empty Object metadata cannot prove first SQL arguments or String and return values', async t => {
+  for (const statement of [
+    'sqlStatement.execute(new Object[]{}, "SELECT name FROM users WHERE name=" + data, String.class);',
+    'sqlStatement.execute("SELECT name FROM users WHERE name=" + data + new Object[]{}, String.class);',
+    'String sql = "SELECT name FROM users WHERE name=" + data + new Object[]{};',
+    'sqlStatement.execute("SELECT name FROM users WHERE name=" + result, new Object[]{}, String.class);',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer");
+      String result = request.getParameter("outer"); String selected() { return new Object[]{}; }
+      void run() { String data = "fixed"; String result = selected();
+        ${statement}
+      }
+    }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 4 }], statement);
+  }
+});
+
+test('empty Object constructors never enable legacy enclosing-call compatibility', async t => {
+  const call = 'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data)';
+  for (const statement of [
+    `return ${call};`, `consume(${call});`, `return ${call} + input;`,
+    `consume(${call}, input);`, `String sql = decorate(${call}, input);`,
+    `String sql = input + ${call};`, `String sql = ${call}.concat(input);`,
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); String run() {
+      Object[] marker = new Object[]{}; String data = "fixed"; String input = request.getParameter("x");
+      ${statement}
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], statement);
+  }
+});
+
+test('every SQL fragment and auxiliary argument remains required with empty Object metadata', async t => {
+  const call = 'jdbcTemplate.queryForObject("SELECT name FROM users WHERE name=" + data, new Object[]{}, String.class)';
+  for (const statement of [
+    `${call.replace(', String.class)', ', unknown)')};`,
+    `${call}; String sql = "SELECT name FROM users WHERE name=" + input;`,
+    `${call}; sqlStatement.execute("SELECT name FROM users WHERE name=" + input);`,
+    `${call.replace(', String.class)', ', "SELECT name FROM users WHERE name=" + input)')};`,
+    `consume(${call} + input);`, `consume(${call}, input);`,
+    `String sql = input + ${call};`, `String sql = ${call}.concat(input);`,
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed"; String input = request.getParameter("x");
+      ${statement}
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], statement);
+  }
+});
+
+test('empty Object metadata retains complete-call delimiter depth expression and window bounds', async t => {
+  for (const tail of [
+    ', new Object[]{}, String.class', ', new Object[]{], String.class);',
+    ', new Object[]{}, String.class' + '\n'.repeat(7) + ');',
+    `, new Object[]{}, "${'x'.repeat(1800)}"\n, "${'y'.repeat(1800)}"\n, "${'z'.repeat(800)}");`,
+    ', new Object[]{}, ' + '('.repeat(65) + '1' + ')'.repeat(65) + ');',
+  ]) {
+    const source = `class Example { String data = request.getParameter("outer"); void run() {
+      String data = "fixed";
+      sqlStatement.execute("SELECT name FROM users WHERE name=" + data${tail}
+    } }`;
+    assert.deepEqual((await findings(t, source)).map(({ ruleId, line }) => ({ ruleId, line })),
+      [{ ruleId: 'JAVA-SQLI-002', line: 3 }], tail.length);
+  }
+});
