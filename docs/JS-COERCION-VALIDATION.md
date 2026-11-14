@@ -1,0 +1,9 @@
+# JavaScript coercion before validation
+
+`JS-COERCE-001` reports a narrow, visible `String(undefined)` path. It requires a request body field passed to an `unknown` parameter, a direct `String` conversion forwarded by resolved calls, a validator whose entire supported body rejects non-strings but accepts the resulting literal `"undefined"`, and the validated value passed to a visible SQL `INSERT`. It abstains on unsupported validators, ambiguous calls, missing imports, and visible guards or reassignment that block the path. This is a bounded static proof, not a general JavaScript taint engine.
+
+The development example is [themcp-club](https://github.com/ray-goldman/themcp-club/tree/dev). The pinned vulnerable parent is `1e68c1e5d7134a288d98d1ef7f27381e9afda010`; the fix is `962827329407e2b48ebbd8ae301ce4485dba8b8d`. Scanning the three relevant production files from each revision reports `JS-COERCE-001` at `src/core/agents.ts:500` and `:525` in the parent, and none in the fix. These are exposed development checks, not independent accuracy evidence. No target application code was executed.
+
+Against the accepted November 6 baseline, fresh runs of all seven established datasets have identical input hashes, scoring policies, labeled-case outcomes, and totals. The original real-CVE policy remains at 0/8 successful pairs; the separately reported localized policy remains at 1/8. This change improves detection of the pinned membership-label path without changing the established benchmark scores. The new vulnerable/fixed corpus pair is regression coverage only.
+
+The rule does not cover `Number` coercion, schema frameworks, alias-heavy modules, arbitrary validation branches, or an unobserved side effect. It does not prove that the reported staging request occurred or that the target fix was deployed.
