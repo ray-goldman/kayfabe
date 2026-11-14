@@ -2,8 +2,16 @@
 // Repository-wide checks that need more than one file of context.
 const { authLoggingEvidence } = require('../auth-logging-evidence');
 const { mvcSqlFindings } = require('../csharp-mvc-sql');
+const { coercionFindings } = require('../js-coercion-validation');
 
 module.exports = [
+  {
+    id: 'JS-COERCE-001', title: 'Missing request field coerced before credential or persistence validation',
+    owasp: 'A05', cwe: [20, 704], severity: 'medium', confidence: 'medium', check: coercionFindings,
+    message: 'A request field can become the literal string "undefined" before a downstream type check and allowlist; a visible write follows.',
+    fix: 'Keep the original value typed as unknown through the service boundary and validate presence and type before conversion or writing.',
+    refs: ['https://cwe.mitre.org/data/definitions/20.html', 'https://cwe.mitre.org/data/definitions/704.html'],
+  },
   {
     id: 'CS-SQLI-002', title: 'MVC request string reaches EF raw SQL through a local variable',
     owasp: 'A05', cwe: [89], severity: 'high', confidence: 'high', check: mvcSqlFindings,

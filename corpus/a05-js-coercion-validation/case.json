@@ -1,0 +1,7 @@
+{
+  "id": "a05-js-coercion-validation",
+  "owasp": "A05",
+  "cwe": [20, 704],
+  "description": "An absent request label becomes an allowed string before a chain insert; the fixed flow validates the original value.",
+  "expect": ["JS-COERCE-001"]
+}
