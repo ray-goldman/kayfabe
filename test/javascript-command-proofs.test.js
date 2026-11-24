@@ -47,6 +47,32 @@ test('typed hostname helper dominates a direct command call', async t => {
 test('closed local literal config exports remove a constant-command candidate', async t => {
   assert.equal((await warnings(t, { 'routes.js': configCaller, 'config.js': config })).length, 0);
 });
+
+test('RegExp exec on request text is not an OS command', async t => {
+  const source = `function header(req) {
+  const headerName = req.headers['mcp-name'];
+  const match = /^base64:([A-Za-z0-9+/]+)$/.exec(headerName);
+  return match;
+}`;
+  assert.equal((await warnings(t, { 'routes.js': source })).length, 0);
+});
+test('renamed child_process exec remains a command sink', async t => {
+  const source = `const runner = require('node:child_process');
+function route(req) {
+  runner.exec(req.query.command);
+}`;
+  assert.ok((await warnings(t, { 'routes.js': source })).length > 0);
+});
+test('regex exec on the same line does not hide a command sink', async t => {
+  for (const call of ['exec(req.query.command)', 'execSync(req.query.command)', 'runner.exec(req.query.command)']) {
+    const source = `const { exec, execSync } = require('node:child_process');
+const runner = require('node:child_process');
+function route(req) {
+  const match = /^x/.exec(req.query.x); ${call};
+}`;
+    assert.ok((await warnings(t, { 'routes.js': source })).length > 0, call);
+  }
+});
 test('coercing, permissive, stateful or non-dominating hostname guards retain warnings', async t => {
   for (const [route, check] of [
     [caller, helper.replace("typeof host === 'string' && ", '')],

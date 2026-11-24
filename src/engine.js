@@ -24,6 +24,10 @@ const { buildJavaProjectIndex } = require('./java-project');
 const { javaOutputFilter } = require('./java-sanitizers');
 const { buildScriptProject, scriptSinkFilter } = require('./script-helpers');
 const { pathSinkFilter } = require('./path-proofs');
+const { closedLiteralArrayPathSafe } = require('./js-path-literal-array');
+const { encodedRelativeRedirectSafe } = require('./js-relative-redirect');
+const { regexLiteralExecSafe } = require('./js-regex-exec');
+const { pythonTarLiteralFilterSafe } = require('./python-tar-filter');
 const { goFunctionTaint } = require('./go-scopes');
 const { analyzeCSharpFile } = require('./parsers/csharp/coverage');
 const { analyzeDotnetSummaries } = require('./dotnet/analysis');
@@ -163,12 +167,16 @@ function applyCodeRules(file, lang, raw, codeLines, taint, javaProject, scriptPr
         }
       }
       if (hit) {
+        if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-CMDI-001' && regexLiteralExecSafe(W)) continue;
+        if (lang === 'python' && rule.id === 'PY-ARCHIVE-001' && pythonTarLiteralFilterSafe(W)) continue;
         if (rule.id === 'PY-LOG-001' && pythonLogging && pythonLogging(i)) continue;
         if (/^PY-SQLI-00[123]$/.test(rule.id) && pythonSqlConstantLine(file, scriptProject, i)) continue;
         if (rule.id === 'JS-XSS-001' && domConstantSink && domConstantSink(i)) continue;
         if (lang === 'csharp' && ['CS-SQLI-001', 'CS-CMDI-001'].includes(rule.id) &&
             csharpConstantSink(i, rule.id)) continue;
         if (pathProof && pathProof(rule.id, i)) continue;
+        if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-PATH-001' && closedLiteralArrayPathSafe(code, i)) continue;
+        if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-REDIRECT-001' && encodedRelativeRedirectSafe(code, i)) continue;
         if (scriptProof && scriptProof(rule.id, i, W)) continue;
         if (contextualJavaOutput && javaOutput(i, W)) continue;
         if (constantJavaSink && ['JAVA-SQLI-001', 'JAVA-SQLI-002', 'JAVA-CMDI-001', 'JAVA-REDIRECT-001'].includes(rule.id)

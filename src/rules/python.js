@@ -138,7 +138,7 @@ module.exports = [
   {
     id: 'PY-ARCHIVE-001', title: 'Archive extraction without path filtering (tar/zip slip)',
     owasp: 'A01', cwe: [22], severity: 'high', confidence: 'medium', languages: L,
-    pattern: /\.extractall\s*\((?![^)]*filter\s*=\s*["'](?:data|tar)["'])|\.extract\s*\(\s*\w+\s*,\s*[^)]*\)(?![^\n]*filter=)/,
+    pattern: /\.extractall\s*\(|\.extract\s*\(\s*\w+\s*,/,
     fileRequires: /\b(?:tarfile|zipfile|shutil\.unpack_archive)\b/,
     message: 'Member names like `../../etc/cron.d/x` or symlinks escape the destination (CVE-2007-4559).',
     fix: 'Python ≥3.12: `tar.extractall(dest, filter="data")`; otherwise validate each member\'s resolved path.',

@@ -1,5 +1,8 @@
 const { execFile } = require('child_process');
 const HOST = /^[a-z0-9.-]{1,253}$/i;
+function readHeader(req) {
+  return /^base64:([A-Za-z0-9+/]+)$/.exec(req.headers['mcp-name']);
+}
 app.post('/diag/ping', (req, res) => {
   const host = String(req.body.host);
   if (!HOST.test(host)) return res.sendStatus(400);
