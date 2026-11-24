@@ -26,6 +26,11 @@ const html=`def index():
 `;
 const sqlHits=fs=>fs.filter(f=>/^PY-SQLI-00[123]$/.test(f.ruleId));
 const htmlHits=fs=>fs.filter(f=>f.ruleId==='TPL-XSS-001');
+test('tar.extract with the data filter is not an unsafe archive extraction',async t=>{
+ const base='import tarfile\ndef unpack(src, dest):\n    with tarfile.open(src) as tar:\n        for member in tar.getmembers():\n            tar.extract(member, dest, filter="data")\n';
+ assert.equal((await findings(t,base)).filter(f=>f.ruleId==='PY-ARCHIVE-001').length,0);
+ assert.equal((await findings(t,base.replace(', filter="data"',''))).filter(f=>f.ruleId==='PY-ARCHIVE-001').length,1);
+});
 test('Python SQL literal local maps with a literal fallback are bounded choices',async t=>{
  for(const source of [sql,sql.replace('choices = {"price": "price ASC", "size": "size DESC"}','choices = {\n        "price": "price ASC",\n        "size": "size DESC",\n    }'),sql.replace('    choices','    if key:\n        choices').replace(/^    (order|query|cursor)/gm,'        $1')])
   assert.equal(sqlHits(await findings(t,imports+source)).length,0,source);

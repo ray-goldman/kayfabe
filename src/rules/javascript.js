@@ -50,8 +50,8 @@ module.exports = [
   {
     id: 'JS-CMDI-001', title: 'OS command built from dynamic string (child_process)',
     owasp: 'A05', cwe: [78], severity: 'critical', confidence: 'medium', languages: L,
-    pattern: /\b(?:exec|execSync|child_process\.exec|cp\.exec|shelljs\.exec|shell\.exec|execa\.command|execaCommand)\s*\(\s*(?:`[^`]*\$\{|(["'])(?:(?!\1).)*\1\s*\+|[A-Za-z_$][\w$.]*\s*\+)/,
-    taintSink: /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|execa|execaCommand)\s*\(/,
+    pattern: /(?<![\w$.])(?:exec|execSync|child_process\.exec|cp\.exec|shelljs\.exec|shell\.exec|execa\.command|execaCommand)\s*\(\s*(?:`[^`]*\$\{|(["'])(?:(?!\1).)*\1\s*\+|[A-Za-z_$][\w$.]*\s*\+)/,
+    taintSink: /(?<![\w$.])(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|execa|execaCommand)\s*\(/,
     notLine: /\bshell-quote\b|\bshellescape\(|\bquote\(\[/,
     message: '`exec()` runs its argument through `/bin/sh`. Any shell metacharacter in user data (`;`, `|`, `$()`, backticks) executes attacker commands.',
     fix: 'Use `execFile`/`spawn` with an argument array and `shell: false`; validate input against an allow-list; never interpolate into a command string.',
