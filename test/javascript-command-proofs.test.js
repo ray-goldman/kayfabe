@@ -56,6 +56,13 @@ test('RegExp exec on request text is not an OS command', async t => {
 }`;
   assert.equal((await warnings(t, { 'routes.js': source })).length, 0);
 });
+test('renamed child_process exec remains a command sink', async t => {
+  const source = `const runner = require('node:child_process');
+function route(req) {
+  runner.exec(req.query.command);
+}`;
+  assert.ok((await warnings(t, { 'routes.js': source })).length > 0);
+});
 test('coercing, permissive, stateful or non-dominating hostname guards retain warnings', async t => {
   for (const [route, check] of [
     [caller, helper.replace("typeof host === 'string' && ", '')],
