@@ -63,6 +63,16 @@ function route(req) {
 }`;
   assert.ok((await warnings(t, { 'routes.js': source })).length > 0);
 });
+test('regex exec on the same line does not hide a command sink', async t => {
+  for (const call of ['exec(req.query.command)', 'execSync(req.query.command)', 'runner.exec(req.query.command)']) {
+    const source = `const { exec, execSync } = require('node:child_process');
+const runner = require('node:child_process');
+function route(req) {
+  const match = /^x/.exec(req.query.x); ${call};
+}`;
+    assert.ok((await warnings(t, { 'routes.js': source })).length > 0, call);
+  }
+});
 test('coercing, permissive, stateful or non-dominating hostname guards retain warnings', async t => {
   for (const [route, check] of [
     [caller, helper.replace("typeof host === 'string' && ", '')],

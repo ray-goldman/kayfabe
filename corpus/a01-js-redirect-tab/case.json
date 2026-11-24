@@ -1,0 +1,7 @@
+{
+  "id": "a01-js-redirect-tab",
+  "owasp": "A01",
+  "cwe": [601],
+  "description": "A literal tab after the first slash is stripped by URL parsing, exposing a protocol-relative redirect.",
+  "expect": ["JS-REDIRECT-001"]
+}

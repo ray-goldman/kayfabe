@@ -31,6 +31,25 @@ test('tar.extract with the data filter is not an unsafe archive extraction',asyn
  assert.equal((await findings(t,base)).filter(f=>f.ruleId==='PY-ARCHIVE-001').length,0);
  assert.equal((await findings(t,base.replace(', filter="data"',''))).filter(f=>f.ruleId==='PY-ARCHIVE-001').length,1);
 });
+test('conditional and multiline tar.extract calls retain unsafe archive warnings',async t=>{
+ const prefix='import tarfile\ndef unpack(tar, member, dest, trusted):\n';
+ for(const call of [
+  '    tar.extract(member, dest, filter="data" if trusted else None)\n',
+  '    tar.extractall(dest, filter="data" if trusted else None)\n',
+  '    tar.extract(member, dest\n        )\n',
+  '    tar.extract(member, dest,\n        filter=None)\n',
+  '    tar.extractall(dest,\n        filter=None)\n',
+  '    tar.extract(member, dest +\n        "/subdir")\n',
+  '    tar.extract(member, normalize(dest, filter="data"))\n',
+  '    tar.extractall(normalize(dest, filter="data"))\n',
+ ]) assert.ok((await findings(t,prefix+call)).some(f=>f.ruleId==='PY-ARCHIVE-001'),call);
+});
+test('two filtered tar calls on one line stay safe only when both have literal filters',async t=>{
+ const prefix='import tarfile\ndef unpack(tar, first, second, dest):\n';
+ const safe='    tar.extract(first, dest, filter="data"); tar.extract(second, dest, filter="data")\n';
+ assert.equal((await findings(t,prefix+safe)).filter(f=>f.ruleId==='PY-ARCHIVE-001').length,0);
+ assert.ok((await findings(t,prefix+safe.replace('second, dest, filter="data"','second, dest'))).some(f=>f.ruleId==='PY-ARCHIVE-001'));
+});
 test('Python SQL literal local maps with a literal fallback are bounded choices',async t=>{
  for(const source of [sql,sql.replace('choices = {"price": "price ASC", "size": "size DESC"}','choices = {\n        "price": "price ASC",\n        "size": "size DESC",\n    }'),sql.replace('    choices','    if key:\n        choices').replace(/^    (order|query|cursor)/gm,'        $1')])
   assert.equal(sqlHits(await findings(t,imports+source)).length,0,source);

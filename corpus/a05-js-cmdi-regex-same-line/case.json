@@ -1,0 +1,7 @@
+{
+  "id": "a05-js-cmdi-regex-same-line",
+  "owasp": "A05",
+  "cwe": [78],
+  "description": "A regex exec on the same line must not hide a shell command sink.",
+  "expect": ["JS-CMDI-001"]
+}

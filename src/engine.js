@@ -27,6 +27,7 @@ const { pathSinkFilter } = require('./path-proofs');
 const { closedLiteralArrayPathSafe } = require('./js-path-literal-array');
 const { encodedRelativeRedirectSafe } = require('./js-relative-redirect');
 const { regexLiteralExecSafe } = require('./js-regex-exec');
+const { pythonTarLiteralFilterSafe } = require('./python-tar-filter');
 const { goFunctionTaint } = require('./go-scopes');
 const { analyzeCSharpFile } = require('./parsers/csharp/coverage');
 const { analyzeDotnetSummaries } = require('./dotnet/analysis');
@@ -167,6 +168,7 @@ function applyCodeRules(file, lang, raw, codeLines, taint, javaProject, scriptPr
       }
       if (hit) {
         if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-CMDI-001' && regexLiteralExecSafe(W)) continue;
+        if (lang === 'python' && rule.id === 'PY-ARCHIVE-001' && pythonTarLiteralFilterSafe(W)) continue;
         if (rule.id === 'PY-LOG-001' && pythonLogging && pythonLogging(i)) continue;
         if (/^PY-SQLI-00[123]$/.test(rule.id) && pythonSqlConstantLine(file, scriptProject, i)) continue;
         if (rule.id === 'JS-XSS-001' && domConstantSink && domConstantSink(i)) continue;

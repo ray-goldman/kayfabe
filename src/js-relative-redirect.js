@@ -16,8 +16,9 @@ function encodedRelativeRedirectSafe(code, lineIndex) {
   const matches = [...template.matchAll(expression)];
   if (matches.length === 0) return false;
   const reduced = template.replace(expression, 'x');
+  // URL parsers strip ASCII tabs/newlines before testing a leading //.
   return reduced.startsWith('/') && !reduced.startsWith('//') &&
-    !reduced.includes('${') && !/[\\\r\n]/.test(reduced);
+    !reduced.includes('${') && !/[\\\s\x00-\x1f\x7f]/u.test(reduced);
 }
 
 module.exports = { encodedRelativeRedirectSafe };

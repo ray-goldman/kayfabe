@@ -30,6 +30,11 @@ test('arbitrary destination and protocol-relative template still warn', async t 
   assert.ok((await redirects(t, arbitrary)).length > 0);
   assert.ok((await redirects(t, protocolRelative)).length > 0);
 });
+test('literal tab after slash is not a proven local redirect', async t => {
+  const source = 'function redirect(response, path) { response.redirect(303, path); }\nfunction route(request, response) {\n  redirect(response, `/\t/evil.example/${encodeURIComponent(request.params.id)}`);\n}';
+  assert.equal(new URL('/\t/evil.example/x', 'https://safe.example/').hostname, 'evil.example');
+  assert.ok((await redirects(t, source)).length > 0);
+});
 
 test('unsafe wrapper or shadowed encoder retains a warning', async t => {
   const route = 'function route(request, response) {\n  redirect(response, `/admin/agents?agent=${encodeURIComponent(request.params.id)}`);\n}';

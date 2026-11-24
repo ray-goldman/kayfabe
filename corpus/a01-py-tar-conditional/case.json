@@ -1,0 +1,7 @@
+{
+  "id": "a01-py-tar-conditional",
+  "owasp": "A01",
+  "cwe": [22],
+  "description": "Conditional filters and multiline tar.extract calls can extract without path filtering.",
+  "expect": ["PY-ARCHIVE-001"]
+}
