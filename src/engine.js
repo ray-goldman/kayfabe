@@ -24,6 +24,8 @@ const { buildJavaProjectIndex } = require('./java-project');
 const { javaOutputFilter } = require('./java-sanitizers');
 const { buildScriptProject, scriptSinkFilter } = require('./script-helpers');
 const { pathSinkFilter } = require('./path-proofs');
+const { closedLiteralArrayPathSafe } = require('./js-path-literal-array');
+const { encodedRelativeRedirectSafe } = require('./js-relative-redirect');
 const { goFunctionTaint } = require('./go-scopes');
 const { analyzeCSharpFile } = require('./parsers/csharp/coverage');
 const { analyzeDotnetSummaries } = require('./dotnet/analysis');
@@ -169,6 +171,8 @@ function applyCodeRules(file, lang, raw, codeLines, taint, javaProject, scriptPr
         if (lang === 'csharp' && ['CS-SQLI-001', 'CS-CMDI-001'].includes(rule.id) &&
             csharpConstantSink(i, rule.id)) continue;
         if (pathProof && pathProof(rule.id, i)) continue;
+        if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-PATH-001' && closedLiteralArrayPathSafe(code, i)) continue;
+        if (['javascript', 'typescript'].includes(lang) && rule.id === 'JS-REDIRECT-001' && encodedRelativeRedirectSafe(code, i)) continue;
         if (scriptProof && scriptProof(rule.id, i, W)) continue;
         if (contextualJavaOutput && javaOutput(i, W)) continue;
         if (constantJavaSink && ['JAVA-SQLI-001', 'JAVA-SQLI-002', 'JAVA-CMDI-001', 'JAVA-REDIRECT-001'].includes(rule.id)
